@@ -1,0 +1,430 @@
+==================================live_block_copy/stream/snapshot_discussion==================================
+
+Image streaming API.
+--------------------
+http://wiki.qemu.org/Features/LiveBlockMigration/ImageStreamingAPI
+
+The stream commands populate an image file by streaming data from its backing file. Once all blocks have been streamed, the dependency on the original backing image is removed. The stream commands can be used to implement post-copy live block migration and rapid deployment.
+
+The block_stream command starts streaming the image file. Streaming is performed in the background while the guest is running.
+When streaming completes successfully or with an error, the BLOCK_JOB_COMPLETED event is raised.
+The progress of a streaming operation can be polled using query-block-jobs. This returns information regarding how much of the image has been streamed for each active streaming operation.
+The block_job_cancel command stops streaming the image file. The image file retains its backing file. A new streaming operation can be started at a later time.
+The block_job_set_speed command adjusts the rate limit for a streaming operation. This can be used to limit the impact on storage performance during streaming.
+
+The command synopses are as follows: 
+
+block_stream
+------------
+
+Copy data from a backing file into a block device.
+
+The block streaming operation is performed in the background until the entire
+backing file has been copied.  This command returns immediately once streaming
+has started.  The status of ongoing block streaming operations can be checked
+with query-block-jobs.  The operation can be stopped before it has completed
+using the block_job_cancel command.
+
+If a base file is specified then sectors are not copied from that base file and
+its backing chain.  When streaming completes the image file will have the base
+file as its backing file.  This can be used to stream a subset of the backing
+file chain instead of flattening the entire image.
+
+On successful completion the image file is updated to drop the backing file.
+
+Arguments:
+
+- device: device name (json-string)
+- base:   common backing file (json-string, optional)
+
+Errors:
+
+DeviceInUse:    streaming is already active on this device
+DeviceNotFound: device name is invalid
+NotSupported:   image streaming is not supported by this device
+
+Events:
+
+On completion the BLOCK_JOB_COMPLETED event is raised with the following
+fields:
+
+- type:     job type ("stream" for image streaming, json-string)
+- device:   device name (json-string)
+- len:      maximum progress value (json-int)
+- offset:   current progress value (json-int)
+- speed:    rate limit, bytes per second (json-int)
+- error:    error message (json-string, only on error)
+
+The completion event is raised both on success and on failure.  On
+success offset is equal to len.  On failure offset and len can be
+used to indicate at which point the operation failed.
+
+On failure the error field contains a human-readable error message.  There are
+no semantics other than that streaming has failed and clients should not try
+to interpret the error string.
+
+Examples:
+---------
+-> { "execute": "block_stream", "arguments": { "device": "virtio0" } }
+<- { "return":  {} }
+
+block_job_set_speed
+-------------------
+
+Set maximum speed for a background block operation.
+
+This command can only be issued when there is an active block job.
+
+Throttling can be disabled by setting the speed to 0.
+
+Arguments:
+
+- device: device name (json-string)
+- value:  maximum speed, in bytes per second (json-int)
+
+Errors:
+NotSupported:    job type does not support speed setting
+DeviceNotActive: streaming is not active on this device
+
+Example:
+
+-> { "execute": "block_job_set_speed",
+    "arguments": { "device": "virtio0", "value": 1024 } }
+
+block_job_cancel
+----------------
+
+Stop an active block streaming operation.
+
+This command returns once the active block streaming operation has been
+stopped.  It is an error to call this command if no operation is in progress.
+
+The image file retains its backing file unless the streaming operation happens
+to complete just as it is being cancelled.
+
+A new block streaming operation can be started at a later time to finish
+copying all data from the backing file.
+
+Arguments:
+
+- device: device name (json-string)
+
+Errors:
+
+DeviceNotActive: streaming is not active on this device
+DeviceInUse:     cancellation already in progress
+
+Examples:
+
+-> { "execute": "block_job_cancel", "arguments": { "device": "virtio0" } }
+<- { "return":  {} }
+
+query-block-jobs
+----------------
+
+Show progress of ongoing block device operations.
+
+Return a json-array of all block device operations.  If no operation is
+active then return an empty array.  Each operation is a json-object with the
+following data:
+
+- type:     job type ("stream" for image streaming, json-string)
+- device:   device name (json-string)
+- len:      maximum progress value (json-int)
+- offset:   current progress value (json-int)
+- speed:    rate limit, bytes per second (json-int)
+
+Progress can be observed as offset increases and it reaches len when
+the operation completes.  Offset and len have undefined units but can be
+used to calculate a percentage indicating the progress that has been made.
+
+Example:
+
+-> { "execute": "query-block-jobs" }
+<- { "return":[
+      { "type": "stream", "device": "virtio0",
+        "len": 10737418240, "offset": 709632,
+        "speed": 0 }
+   ]
+ }
+
+
+How live block copy works.
+--------------------------
+Live block copy does the following:
+ 1).Create and switch to the destination file: snapshot_blkdev virtio-blk0 destination.$fmt $fmt
+ 2).Stream the base into the image file: block_stream -a virtio-blk0 
+
+
+Anthony advised to clone http://wiki.qemu.org/index.php?title=Features/LiveBlockMigrationFuture to the list in order to encourage discussion, so here it is: 
+QEMU is expected to support these features (some already implemented)
+http://lists.nongnu.org/archive/html/qemu-devel/2011-07/msg00378.html
+----------------------------------------------------------------------
+= Live features =
+
+== Live block copy ==
+
+   Ability to copy 1+ virtual disk from the source backing file/block
+   device to a new target that is accessible by the host. The copy
+   supposed to be executed while the VM runs in a transparent way.
+
+== Live snapshots and live snapshot merge ==
+
+   Live snapshot is already incorporated (by Jes) in qemu (still need
+   virt-agent work to freeze the guest FS).
+   Live snapshot merge is required in order of reducing the overhead
+   caused by the additional snapshots (sometimes over raw device).
+   We'll use live copy to do the live merge
+
+== Image streaming (Copy on read) ==
+   Ability to start guest execution while the parent image reside
+   remotely and each block access is replicated to a local copy (image
+   format snapshot)
+   Such functionality can be hooked together with live block migration
+   instead of the 'post copy' method.
+
+== Live block migration (pre/post) ==
+
+   Beyond live block copy we'll sometimes need to move both the storage
+   and the guest. There are two main approached here:
+   - pre copy
+     First live copy the image and only then live migration the VM.
+     It is simple and safer approach in terms of management app, but if
+     the purpose of the whole live block migration was to balance the
+     cpu load, it won't be practical to use since copying an image of
+     100GB will take too long.
+   - post copy (streaming / copy on read)
+     First live migrate the VM, then on line stream its blocks.
+     It's better approach for HA/load balancing but it might make
+     management complex (need to keep the source VM alive, handling
+     failures)
+
+   In addition there are two cases for the storage access:
+
+   1. Shared storage
+      Live block copy enable this capability, its seems like a rare
+      case for live block migration.
+   2. There are some cases where the is no NFS/SAN storage and live
+      migration is needed. It should be similar to VMW's storage VM
+      motion.
+      http://www.vmware.com/files/pdf/VMware-Storage-VMotion-DS-EN.pdf
+      http://www.vmware.com/products/storage-vmotion/features.html
+
+== Using external dirty block bitmap ==
+
+   FVD has an option to use external dirty block bitmap file in
+   addition to the regular mapping/data files.
+   We can consider using it for live block migration and live merge too.
+   It can also allow additional usages of 3rd party tools to calculate
+   diffs between the snapshots.
+   There is a big down side thought since it will make management
+   complicated and there is the risky of the image and its bitmap file
+   get out of sync. It's much better choice to have qemu-img tool to be
+   the single interface to the dirty block bitmap data.
+
+= Solutions =
+
+== Non shared storage ==
+
+   Either use iscsi (target and initiator) or NBD or proprietary qemu
+   solution. iScsi in theory is the best but there is a problem of
+   dealing with COW images - iScsi cannot report the COW level and
+   detect un-allocated blocks. This might force us to use
+   proprietary solution.
+   An interesting option (by Orit Wasserman) was to use iScsi for
+   exporting the images externally to qemu level and qemu will access
+   as if they were a local device. This can work well w/o almost any
+   effort. What do we do with chains of COW files? We create up to N
+   such iscsi connections for every COW file in the chain.
+
+== Live block migration ==
+
+   Use the streaming approach + regular live migration + iscsi:
+   Execute regular live migration and at the end of it, start streaming.
+   If there is no shared storage, use the external iscsi and behave as
+   if the image is local. At the end of the streaming operation there
+   will be a new local base image.
+
+== Block mirror layer ==
+
+   Was invented in order to duplicate write IOs for the source and
+   destination images. It prevents the potential race when both qemu
+   and the management crash at the end of the block copy stage and it
+   is unknown whether management should pick the source or the
+   destination
+
+== Streaming ==
+
+   No need for mirror since only the destination changes and is
+   writable.
+
+== Block copy background task ==
+
+   Can be shared between block copy and streaming
+
+== Live snapshot ==
+
+   It can be seen as a (local) stream that preserve the current COW
+   chain
+
+= Use cases =
+
+ 1. Basic streaming, single base master image on source storage, need
+    to be instantiated on destination storage
+
+     The base image is a single level COW format (file or lvm).
+     The base is RO and only new destination is RW. base' is empty at
+     the beginning. The base image content is being copied in the
+     background to base'. At the end of the operation, base' is a
+     standalone image w/o depending on the base image.
+
+     a. Case of a shared storage streaming guest boot
+
+     Before:           src storage: base             dst storage: none
+     After             src storage: base             dst storage: base'
+
+     b. Case of no shared storage streaming guest boot
+        Every thing is the same, we use external iscsi target on the
+        src host and external iscsi initiator on the destination host.
+        Qemu boots from the destination by using the iscsi access. This
+        is transparent to qemu (expect cmd syntax change ). Once the
+        streaming is over, we can live drop the usage of iscsi and open
+        the image directly (some sort of null live copy)
+
+     c. Live block migration (using streaming) w/ shared storage.
+        Exactly like 1.a. First create the destination image, then we
+        run live migration there w/o data in the new image. Now we
+        stream like the boot scenario.
+
+     d. Live block migration (using streaming) w/o shared storage.
+        Like 1.b. + 1.c.
+
+     *** There is complexity to handle multiple block device belonging
+     to the same VM. Management will need to track each stream finish
+     event and manage failures accordingly.
+
+ 2. Basic streaming of raw files/devices
+
+    Here we have an issue - what happens if there is a failure in the
+    middle? Regular COW can sustain a failure since the intermediate
+    base' contains information dirty bit block information. Such a
+    base' intermediate raw image will be broken. We cannot revert back
+    to the original base and start over because new writes were written
+    only to the base'.
+
+    Approaches:
+    a. Don't support that
+    b. Use intermediate COW image and then live copy it into raw (waste
+       time, IO, space). One can easily add new COW over the source and
+       continue from there.
+    c. Use external metadata of dirty-block-bitmap even for raw
+
+    Suggestion: at this stage, do either recommendation #a or #b
+
+
+ 3. Basic live copy, single base master image on source storage, need
+    to be copied to the destination storage
+
+    The base image is a single level COW format or a raw file/device.
+    The base image content is being copied in the background to base'.
+    At the end of the operation, base' is a standalone image w/o
+    depending on the base image. In this case we only take into account
+    a running VM, no need to do that for boot stage.
+    So it is either VM running locally and about to change its storage
+    or a VM live migration. The plan is to use the mirror driver
+    approach. Both src/dst are writable.
+
+     a. Case of a shared storage, a VM changes its block device
+
+     Before:           src storage: base             dst storage: none
+     After             src storage: base             dst storage: base'
+
+     This is a plain live copy w/o moving the VM.
+     The case w/o shared storage seems not relevant here.
+     We might want to move multiple block devices of the VM.
+     It is written here for completeness - it shouldn't change anything.
+     Still management/events will use the block name/id.
+
+     b. Live block migration (w/o streaming) w/ shared storage.
+        Unlike in the streaming case, the order here is reversed:
+        Run live copy. When it ends and we're in the mirror state, run
+        live migration. When it ends, stop the mirroring and make the
+        VM continue on the destination.
+        That's probably a rare use case.
+
+     c. Live block migration (using streaming) w/o shared storage.
+        Like 3.b. by using external iscsi
+
+
+ 4. COW chains that preserve the full structure
+
+    Before:  src: base <- sn1 <- snx    dst: none
+    After:   src: base <- sn1 <- snx    dst: base' <- sn1' <- snx'
+
+    All of the original snapshot chains should be copied or stream as
+    is to the new storage. With copying we can do all of the non leaf
+    images using standard 'cp tools'.
+    If we're to use iscsi, we'll need to create N such connections.
+    Probably not a common use case for streaming, we might ignore this
+    and use this scenario only for copying.
+
+ 5. Like 4. but the chain can collapse. In fact this is like special
+    case of #4
+
+     Before:src: base <- sn1 <- sn2 .. <- snx  dst: none
+     After: src: base <- sn1 <- sn2 ...<- snx  dst: base'<-sn1'..<- sny'
+
+    There is no difference from #4 other than collapsing some chain
+    path into the dst leaf
+
+ 6. Live snapshot
+
+    It's here since the interface can be similar. Basically it is
+    similar to live copy but instead of copying, we switch to another
+    COW on top. The only (separate) addition would
+    be to add a verb to ask the guest to flush its file systems.
+
+    Before:           storage: base <- s1 <- sx
+    After             storage: base <- s1 <- sx <-sx+1
+
+== Exceptions ==
+
+ 1. Hot unplug of the relevant disk
+    Prevent that. (or cancel the operation)
+
+ 1. Live migration in the middle of non migration action from above
+    Shall we allow it? It can work but at the end of live migration we
+    need to reopen the images (NFS mainly), it might add un-needed
+    complexity.
+    We better prevent that.
+
+
+= Interface =
+
+== Streaming (by Stefan) ==
+
+  1. Start a background streaming operation:
+    (qemu) block_stream -a ide0-hd
+
+  2. Check the status of the operation:
+    (qemu) info block-stream
+    Streaming device ide0-hd: Completed 512 of 34359738368 bytes
+
+  3. The status changes when the operation completes:
+    (qemu) info block-stream
+    No active stream
+
+  On completion the image file no longer has a backing file dependency.
+  When streaming completes QEMU updates the image file metadata to
+  indicate that no backing file is used.
+  The QMP interface is similar but provides QMP events to signal
+  streaming completion and failure.  Polling to query the streaming
+  status is only used when the management application wishes to refresh
+  progress information.
+  If guest execution is interrupted by a power failure or QEMU crash,
+  then the image file is still valid but streaming may be incomplete.
+  When QEMU is launched again the block_stream command can be issued to
+  resume streaming.
+
+
+

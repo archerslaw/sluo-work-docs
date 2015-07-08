@@ -1,0 +1,146 @@
+==================================general operation==================================
+1.host unload/load kvm module.
+------------------------------
+# lsmod | grep kvm
+kvm_intel              52570  0 
+kvm                   314707  1 kvm_intel
+# modprobe -r kvm_intel
+# lsmod | grep kvm
+# modprobe kvm_intel
+# lsmod | grep kvm
+kvm_intel              52570  0 
+kvm                   314707  1 kvm_intel
+# modinfo kvm
+filename:       /lib/modules/2.6.32-268.el6.x86_64/kernel/arch/x86/kvm/kvm.ko
+license:        GPL
+author:         Qumranet
+srcversion:     2AB7D84CA41FE459A909AFA
+depends:        
+vermagic:       2.6.32-268.el6.x86_64 SMP mod_unload modversions 
+parm:           oos_shadow:bool
+parm:           ignore_msrs:bool
+parm:           allow_unsafe_assigned_interrupts:Enable device assignment on platforms without interrupt remapping support. (bool)
+
+2.'-no-shutdown' flag should keep working.
+------------------------------------------
+<CLI>-no-shutdown
+(qemu) system_powerdown
+(qemu) handle_dev_stop: stop
+(qemu) info status
+VM status: paused (shutdown)
+(qemu) system_reset
+(qemu) info status
+VM status: paused
+(qemu) cont
+(qemu) info status
+VM status: running
+
+3.boot guest with '-nodefconfig -nodefaults' option.
+----------------------------------------------------
+# /usr/libexec/qemu-kvm ... -nodefconfig -nodefaults
+should doesn't show any default device in monitor. 
+(qemu) info block
+drive-disk: removable=0 io-status=ok file=/home/RHEL6.3-20120426.2-Server-x86_64.qcow2 ro=0 drv=qcow2 encrypted=0
+
+4.boot a guest with '-writeconfig' and '-readconfig'.
+-----------------------------------------------------
+1)boot a guest with "-writeconfig" option without -monitor stdio(if with stdio monitor, will get duplicated id 'monitor' error), qemu-kvm has devices(not all devices) dumped into the file appended in qemu-kvm command line. eg: # /usr/libexec/qemu-kvm ... -writeconfig /path/filename
+# /usr/libexec/qemu-kvm -M rhel6.3.0 -cpu SandyBridge -enable-kvm -m 4096 -smp 2,sockets=2,cores=1,threads=1 -usb -device usb-tablet,id=input0 -name sluo_test -uuid `uuidgen` -drive file=/home/RHEL6.3-20120426.2-Server-x86_64.qcow2,format=qcow2,if=none,id=drive-disk,cache=none,werror=stop,rerror=stop -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=drive-disk,scsi-id=0,lun=0,id=scsi_image,bootindex=1 -netdev tap,id=hostnet0,script=/etc/qemu-ifup -device rtl8139,netdev=hostnet0,id=virtio-net-pci0,mac=08:2E:0F:0A:0D:B1,bus=pci.0,bootindex=2 -device virtio-balloon-pci,id=balloon0,bus=pci.0 -spice port=5931,disable-ticketing -vga qxl -global qxl-vga.vram_size=67108864 -nodefconfig -nodefaults -boot menu=on -writeconfig /tmp/qemu-kvm.cfg
+2)boot a guest with "-readconfig" option in qemu-kvm command line, guest have all devices which included in the /path/filename.
+# /usr/libexec/qemu-kvm -M rhel6.3.0 -cpu SandyBridge -enable-kvm -m 4096 -smp 2,sockets=2,cores=1,threads=1 -usb -name sluo_test -uuid `uuidgen` -boot menu=on -readconfig /tmp/qemu-kvm.cfg
+
+5.intall guest via following ways.
+----------------------------------
+ physical cd-rom (-cdrom /dev/sr0).
+ virtual cd-rom(-cdrom /path/to/isofile).
+ iso file(-boot d -drive=/path/to/isofile,media=cdrom...).
+ kernel image(-kernel /path/to/vmliuz -initrd /path/to/initrd.img -append method=http://path/to/os).
+ gPXE/etherboot(-boot n -net nic,model=rtl8139/e1000/virtio) with three types of nic model.
+# vim grub/grub.conf 
+...
+default=0
+timeout=5
+splashimage=(hd0,0)/grub/splash.xpm.gz
+hiddenmenu
+title sluo
+        root (hd0,0)
+        kernel /vmlinuz vnc vncconnect=dhcp headless ip=dhcp ksdevice=eth0 method=http://tree.englab.nay.redhat.com/pub/rhel/rel-eng/RHEL6.3/RHEL6.3-20120516.0/x86_64/os/
+        initrd /initrd.img
+...
+
+6.search which tree did the host install.
+-----------------------------------------
+# cat /root/anaconda-ks.cfg | grep url
+url --url=http://fileshare.englab.nay.redhat.com/pub/redhat/fedora/linux/releases/14/x86_64/os/
+
+7.how to change a removable medium.
+-----------------------------------
+(qemu) info block
+drive-ide0-0-0: removable=0 io-status=ok file=/home/rhel6.3-64.qcow2 ro=0 drv=qcow2 encrypted=0
+cdrom1: removable=1 locked=0 tray-open=0 io-status=ok file=/home/RHEL6.3-20120516.0-Server-x86_64-DVD1.iso ro=0 drv=raw encrypted=0
+(qemu) eject cdrom1
+(qemu) info block
+drive-ide0-0-0: removable=0 io-status=ok file=/home/rhel6.3-64.qcow2 ro=0 drv=qcow2 encrypted=0
+cdrom1: removable=1 locked=0 tray-open=1 io-status=ok [not inserted]
+(qemu) ? change
+change device filename [format] -- change a removable medium, optional format
+(qemu) change cdrom1 file=/home/RHEL6.3-20120516.0-Server-x86_64-DVD1.iso
+
+8.install guest from network.
+-----------------------------
+1).download and install gPXE/Etherboot on brewweb, zrom files can be found under /usr/share/gpxe and /usr/share/etherboot.
+2).switch between gpxe and etherboot to choose install through gpxe or etherboot:
+# alternatives --config qemu-pxe-roms
+There are 2 programs which provide 'qemu-pxe-roms'.
+  Selection    Command
+-----------------------------------------------
+   1           /usr/share/gpxe
+*+ 2           /usr/share/etherboot
+
+Enter to keep the current selection[+], or type selection number: 2
+
+9.kill the QEMU process by "kill -15 `pidof qemu-kvm`".
+# kill -15 `pidof qemu-kvm`
+(qemu) qemu: terminating on signal 15 from pid 6993
+/etc/qemu-ifdown: could not launch network script
+
+10.Coredump filter to exclude KVM guest OS memory out of QEMU process.
+1).start guest with option "-machine dump-guest-core=on/off".
+# /usr/libexec/qemu-kvm -cpu host -m 2G -smp 2 -machine dump-guest-core=on/off ...
+2).trigger a core dump:
+# kill -s SIGSEGV `pidof qemu-kvm`
+# ls -lh /var/core.3026-0-0-11-1354255014-amd-1216-8-2.englab.nay.redhat.com-qemu-kvm  //for all dump include guest memory
+-rw-------. 1 root root 2.5G Nov 30 13:57 /var/core.3026-0-0-11-1354255014-amd-1216-8-2.englab.nay.redhat.com-qemu-kvm
+# ls -lh /var/core.2884-0-0-11-1354254379-amd-1216-8-2.englab.nay.redhat.com-qemu-kvm  //for dump without guest memory
+-rw-------. 1 root root 214M Nov 30 13:46 /var/core.2884-0-0-11-1354254379-amd-1216-8-2.englab.nay.redhat.com-qemu-kvm
+# gdb /usr/libexec/qemu-kvm /var/core.XXXX
+
+11.compile the kernel.
+# make menuconfig---># make bzImage---># make modules---># make modules_install---># make---># make install
+
+12.boot a guest with -smbios type=0 -smbios type=1.
+System Management BIOS - smbios specification defines structures types:
+TYPE            Description
+0                  BIOS information
+1                  System information
+
+vendor: string number of the bios vendor's name
+version: string number of the bios version
+date: string number of bios release date, either mm/dd/yy or mm/dd/yyyy, if the year portion of the string is two digits, the year is assumed to be 19yy, and the mm/dd/yy format is required for smbios version 2.3 and later
+release: major and minor release of the system bios
+manufacturer: number of null terminated string
+product: number of null terminated string
+version: number of null terminated string
+serial: number of null termnated string
+uuid: universal unique id number
+sku: number of null terminated string. used to identify a particular computer configuration for sale. also called a product id or purchase order number. no standard format.
+family: number of null terminated string. used to identify the family a particular computer belongs to(a set of computers similar but not identical from  software or hardware point of view)
+-smbios type=0[,vendor=<str>][,<version=str>][,date=<str>][,release=%d.%d]
+-smbios type=1[,manufacturer=<str>][,product=<str>][,version=<str>][,serial=<str>][,uuid=<uuid>][,sku=<str>][,family=<str>]
+e.g:<qemu-kvm-command-line>-uuid d4e4edf3-719f-4772-b7ba-4e476d86a5dc -smbios type=1,manufacturer=LENOVO,product="M8300T",version=1,serial=CZC9455SC0,uuid=d4e4edf3-719f-4772-b7ba-4e476d86a5dc,sku=470065-200,family=WorkStation -smbios type=0,vendor=DW,version=1,date=11/23/2011,release=1.0
+check it in the guest.
+# dmidecode | more
+
+
+
+

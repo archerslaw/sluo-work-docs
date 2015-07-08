@@ -1,0 +1,10 @@
+==================================sosreport==================================
+The sosreport command is a tool that collects configuration and diagnostic information from a Red Hat Enterprise Linux system. For instance: the running kernel version, loaded modules, and system and service configuration files. The command also runs external programs to collect further information and stores this output in the resulting archive.
+To run sosreport the sos package must be installed. The package is part of the default group and will be installed automatically on most systems.
+# yum install sos
+Note: sosreport requires root permissions to run.
+# sosreport
+The command will normally complete within a few moments on Red Hat Enterprise Linux 6. Older versions may take a few minutes to complete. Depending on local configuration and the options specified in some cases the command may take longer to finish. If you are concerned about the run time of the sosreport command contact your Red Hat support representative for assistance.
+Once completed, sosreport will generate a compressed a file under /tmp. Different versions use different compression schemes (gz, bz2, or xz). The file should be provided to your support representative (normally as an attachment to an open case).
+The size of the archive varies depending on system configuration and any optional sosreport features that are enabled (for example specifying the "all_logs" option of the general module to collect all syslog log files may greatly increase the size of the archive).
+

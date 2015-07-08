@@ -1,0 +1,53 @@
+http://www.sourceware.org/lvm2/wiki/MultipathUsageGuide
+
+Standard output of multipath command:
+# multipath -ll
+mydev1 (3600a0b800011a1ee0000040646828cc5) dm-1 IBM,1815      FAStT
+[size=512M][features=1 queue_if_no_path][hwhandler=1 rdac]
+\_ round-robin 0 [prio=6][active]
+ \_ 29:0:0:1 sdf 8:80  [active][ready]
+ \_ 28:0:1:1 sdl 8:176 [active][ready]
+\_ round-robin 0 [prio=0][enabled]
+ \_ 28:0:0:1 sdb 8:16  [active][ghost]
+ \_ 29:0:1:1 sdq 65:0  [active][ghost]
+
+Annotated output of multipath command:
+mydev1 (3600a0b800011a1ee0000040646828cc5) dm-1 IBM,1815      FAStT
+------  ---------------------------------  ---- --- ---------------
+   |               |                         |    |          |-------> Product
+   |               |                         |    |------------------> Vendor
+   |               |                         |-----------------------> sysfs name
+   |               |-------------------------------------------------> WWID of the device
+   |------------------------------------------------------ ----------> User defined Alias name
+
+[size=512M][features=1 queue_if_no_path][hwhandler=1 rdac]
+ ---------  ---------------------------  ----------------
+     |                 |                        |--------------------> Hardware Handler, if any
+     |                 |---------------------------------------------> Features supported
+     |---------------------------------------------------------------> Size of the DM device
+
+Path Group 1:
+\_ round-robin 0 [prio=6][active]
+-- -------------  ------  ------
+ |    |              |      |----------------------------------------> Path group state
+ |    |              |-----------------------------------------------> Path group priority
+ |    |--------------------------------------------------------------> Path selector and repeat count
+ |-------------------------------------------------------------------> Path group level
+
+First path on Path Group 1:
+ \_ 29:0:0:1 sdf 8:80  [active][ready]
+    -------- --- ----   ------  -----
+      |      |     |        |      |---------------------------------> Physical Path state
+      |      |     |        |----------------------------------------> DM Path state
+      |      |     |-------------------------------------------------> Major, minor numbers
+      |      |-------------------------------------------------------> Linux device name
+      |--------------------------------------------------------------> SCSI information: host, channel, scsi_id and lun
+
+Second path on Path Group 1:
+ \_ 28:0:1:1 sdl 8:176 [active][ready]
+
+Path Group 2:
+\_ round-robin 0 [prio=0][enabled]
+ \_ 28:0:0:1 sdb 8:16  [active][ghost]
+ \_ 29:0:1:1 sdq 65:0  [active][ghost]
+

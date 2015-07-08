@@ -1,0 +1,78 @@
+==================================virtual_block_device==================================
+1.virtual block device interface.
+---------------------------------
+1) ide device
+# -drive file=/home/sluo.raw,format=raw,if=ide,id=drive-ide0-0-0,werror=stop,rerror=stop,cache=none
+  -device ide-drive,bus=ide.0,unit=0,drive=drive-ide0-0-0,id=ide0-0-0  
+2) virtio-blk device
+#-drive file=/home/sluo.qcow2,if=virtio,id=drive-virtio0-0-0,media=disk,cache=none,format=qcow2
+  -device virtio-blk-pci,bus=pci.0,addr=0x4,drive=drive-virtio0-0-0,id=virtio0-0-0
+3) virtio scsi device
+-device virtio-scsi-pci,bus=pci.0,addr=0x5,id=scsi0 
+-drive file='/mnt/sluo.qcow2',if=none,id=drive-scsi0-0-0,if=none,media=disk,cache=none,format=qcow2,werror=stop,aio=native
+-device scsi-hd,drive=drive-scsi0-0-0,bus=scsi0.0,scsi-id=0,lun=0
+4) sata device
+# -device ahci,id=ahci0,bus=pci.0,addr=0x5  -drive file=/home/sluo.raw,if=none,id=drive-sata0-0-0,format=raw,werror=stop,rerror=stop 
+  -device ide-drive,bus=ahci0.0,drive=drive-sata0-0-0,id=sata0-0-0
+
+2.change LVM to r/w in host.
+----------------------------
+# lvchange -prw /dev/test/lvm
+# lvchange -pr /dev/test/lvm
+-p, --permission r|rw   <----Change access permission to read-only or read/write.
+
+3.create a iso file.
+# mkisofs -o cdimg.iso /home/cd_dir
+
+4.boot a guest with a floppy & iso.
+floppy:
+-fda /path/to/floppy.img
+-drive file=/mnt/floppy.img,if=none,id=drive-fdc0-0-0,format=raw,cache=none -global isa-fdc.driveA=drive-fdc0-0-0
+iso:
+-cdrom /mnt/cdromg1.iso
+-drive file=/usr/share/virtio-win/virtio-win-1.1.16.iso,if=none,media=cdrom,id=drive-ide0-1-0,readonly=on,format=raw -device ide-drive,bus=ide.1,unit=0,drive=drive-ide0-1-0,id=ide0-1-0
+
+5.change cdrom in QHP monitor.
+(qemu) info block
+drive-disk: removable=0 io-status=ok file=/home/RHEL-Server-6.3-64-sluo.qcow2 ro=0 drv=qcow2 encrypted=0
+drive-fdc0-0-0: removable=1 locked=0 tray-open=0 file=/home/floppy.img ro=0 drv=raw encrypted=0
+drive-ide0-1-0: removable=1 locked=0 tray-open=0 io-status=ok file=/home/cdimg.iso ro=1 drv=raw encrypted=0
+(qemu) change drive-ide0-1-0 /home/cdimg-sluo.iso
+
+6.boot guest with scsi-block and scsi-generi. 
+-device virtio-scsi-pci,bus=pci.0,addr=0x6,id=scsi0 -drive file=/home/my-data-disk.qcow2,format=qcow2,if=none,id=drive-disk,cache=none,werror=stop,rerror=stop,aio=native -device scsi-hd,drive=drive-disk,bus=scsi0.0,scsi-id=0,lun=0
+
+# sg_map
+/dev/sg0
+/dev/sg1  /dev/sda
+/dev/sg2  /dev/scd0
+/dev/sg3  /dev/scd1
+/dev/sg4  /dev/sdb
+/dev/sg5  /dev/sdc
+-drive file='/dev/sg5',if=none,format=raw,aio=threads,cache=writeback,id=genericdisk -device virtio-scsi-pci,id=bus2 -device scsi-generic,bus=bus2.0,drive=genericdisk,id=datadisk
+
+7.- min_io_size to specify the minimal I/O size without performance impact, this is typically set to the RAID chunk size for arrays.
+  - opt_io_size to specify the optimal sustained I/O size, this is typically the RAID stripe width for arrays.
+
+8.how to use x-data-plane=on via QMUE.
+e.g: # /usr/libexec/qemu-kvm -drive file=path/to/image,if=none,cache=none,*aio=native*,*format=raw*,id=drive0 -device virtio-blk-pci,drive=drive0,*scsi=off*,*x-data-plane=on* ...
+
+9.hot-plug a x-data-plane=on virtio_blk data disk via QMP.
+->{"execute":"__com.redhat_drive_add","arguments": {"file":"/home/my-data-disk.raw","format":"raw","id":"drive-data-disk","cache":"none","aio":"native","werror":"stop","rerror":"stop"}}
+<-{"return": {}}
+->{"execute":"device_add","arguments":{"driver":"virtio-blk-pci","drive":"drive-data-disk","id":"data-disk","bus":"pci.0","addr":"0x6","scsi":"off","x-data-plane":"on"}}
+<-{"return": {}}
+
+10.Inspecting disk IO performance with fio.
+1).download fio tools: fio-2.0.10.tar.bz2
+2).install libaio_devel.
+3).make & make install
+3).# fio fio.profile --output=f.log
+4).or # fio --filename=/dev/vdb --filename=/dev/vdc --filename=/dev/vdd --filename=/dev/vde --filename=/dev/vdf --filename=/dev/vdg --filename=/dev/vdh --filename=/dev/vdi --name=test
+
+11.how to use nbd in KVM.
+1).start nbd-server to export a qcow2 image with absolute path on the NBD server host.
+# nbd-server 12345 /home/my-data-disk.qcow2
+2).launch a KVM guest with this exported image as a data disk.
+e.g:...-drive file=nbd:10.66.83.171:12345,if=none,id=drive-data-disk,format=qcow2,cache=none,aio=native -device virtio-scsi-pci,id=scsi1,addr=0x7,bus=pci.0 -device scsi-hd,bus=scsi1.0,drive=drive-data-disk,id=data-disk,bootindex=2
+

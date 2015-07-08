@@ -1,0 +1,63 @@
+Target (Server):
+# yum install perl-Config-General
+# yum -y install scsi-target-utils*
+# service tgtd restart
+# chkconfig tgtd on
+# tgtadm --lld iscsi --op new --mode target --tid 1 --targetname iqn.2014-09.com.sluo:server.target0
+# for i in {1..5}; do dd if=/dev/zero of=/storage-disk$i bs=10M count=1024; done
+# tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 1 -b /storage-disk0
+# tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 2 -b /storage-disk1
+# tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 3 -b /storage-disk3
+# tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 4 -b /storage-disk4
+# tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --lun 5 -b /storage-disk5
+# tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL
+# tgtadm --lld iscsi --mode target --op show
+
+--params readonly=<0|1>
+This sets the read-only flag of a LUN. A read-only LUN will refuse any attempts to write data to it.
+# tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 1 --params readonly=0
+...
+# tgtadm --lld iscsi --mode logicalunit --op update --tid 1 --lun 5 --params readonly=0
+
+Initator (Client):
+# yum -y install iscsi-initiator-utils
+# service iscsi start
+# service iscsid start
+# chkconfig iscsi on
+# chkconfig iscsid on
+# vim /etc/iscsi/iscsid.conf
+# iscsiadm -m discovery -t sendtargets -p $Server_ip:3260    
+# iscsiadm -m node -T iqn.2014-09.com.sluo:server.target0 -p $Server_ip:3260 -l
+# iscsiadm -m node -T iqn.2014-09.com.sluo:server.target0 -p $Server_ip:3260 --logout
+# .......................................................................... -u    //logout for a specified record
+
+If you want to del the node for good , first you have to logout first.
+# iscsiadm -m node -o delete -T iqn.2014-09.com.sluo:server.target0 -p $Server_ip:3260  //del
+
+Dump current tgtd configuration:
+# tgt-admin --dump > /etc/tgt/targets.conf
+
+iscsi server and client example:
+# cat /etc/tgt/targets.conf 
+default-driver iscsi
+
+<target iqn.2014-09.com.sluo:server-disk.target0>
+    backing-store /root/sluo-data-disk1
+    backing-store /root/sluo-data-disk2
+    backing-store /root/sluo-data-disk3
+    backing-store /root/sluo-system-disk
+    initiator-address 10.66.0.0/24      //allow which client to discover the target
+    incominguser redhat redhat          //user name and passwd
+</target>
+
+# vim /etc/iscsi/iscsid.conf
+# To set a CHAP username and password for initiator
+# authentication by the target(s), uncomment the following lines:
+node.session.auth.username = redhat
+node.session.auth.password = redhat
+
+# To set a discovery session CHAP username and password for the initiator
+# authentication by the target(s), uncomment the following lines:
+discovery.sendtargets.auth.username = redhat
+discovery.sendtargets.auth.password = redhat
+

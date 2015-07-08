@@ -1,0 +1,985 @@
+# yum upgrade https://repos.fedorapeople.org/repos/openstack/openstack-icehouse/rdo-release-icehouse-4.noarch.rpm http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+
+[root@computer-node home]# yum install librabbitmq.x86_64 librabbitmq-tools.x86_64 librabbitmq-devel.x86_64 -y
+[root@network-node home]# yum install librabbitmq.x86_64 librabbitmq-tools.x86_64 librabbitmq-devel.x86_64 -y
+
+controller-node.openstack.com
+[root@controller-node home]# service ntpd start
+Starting ntpd:                                             [  OK  ]
+[root@controller-node home]# chkconfig ntpd on
+
+[root@controller-node home]# yum -y install mysql mysql-server
+[root@controller-node home]# service mysqld start
+[root@controller-node home]# vim /etc/my.cnf
+[mysqld]
+bind-address = 0.0.0.0
+default-storage-engine = innodb
+innodb_file_per_table
+collation-server = utf8_general_ci
+init-connect = 'SET NAMES utf8'
+character-set-server = utf8
+
+[root@controller-node home]# /usr/bin/mysql_secure_installation
+[root@controller-node home]# chkconfig mysqld on
+[root@controller-node home]# service mysqld restart
+Stopping mysqld:                                           [  OK  ]
+Starting mysqld:                                           [  OK  ]
+
+[root@controller-node home]# yum install rabbitmq-server
+[root@controller-node home(KS_ADMIN)]#/usr/lib/rabbitmq/bin/rabbitmq-plugins list
+[ ] amqp_client                       3.1.5
+[ ] cowboy                            0.5.0-rmq3.1.5-git4b93c2d
+[ ] eldap                             3.1.5-gite309de4
+[ ] mochiweb                          2.7.0-rmq3.1.5-git680dba8
+[ ] rabbitmq_amqp1_0                  3.1.5
+[ ] rabbitmq_auth_backend_ldap        3.1.5
+[ ] rabbitmq_auth_mechanism_ssl       3.1.5
+[ ] rabbitmq_consistent_hash_exchange 3.1.5
+[ ] rabbitmq_federation               3.1.5
+[ ] rabbitmq_federation_management    3.1.5
+[ ] rabbitmq_jsonrpc                  3.1.5
+[ ] rabbitmq_jsonrpc_channel          3.1.5
+[ ] rabbitmq_jsonrpc_channel_examples 3.1.5
+[ ] rabbitmq_management               3.1.5
+[ ] rabbitmq_management_agent         3.1.5
+[ ] rabbitmq_management_visualiser    3.1.5
+[ ] rabbitmq_mqtt                     3.1.5
+[ ] rabbitmq_shovel                   3.1.5
+[ ] rabbitmq_shovel_management        3.1.5
+[ ] rabbitmq_stomp                    3.1.5
+[ ] rabbitmq_tracing                  3.1.5
+[ ] rabbitmq_web_dispatch             3.1.5
+[ ] rabbitmq_web_stomp                3.1.5
+[ ] rabbitmq_web_stomp_examples       3.1.5
+[ ] rfc4627_jsonrpc                   3.1.5-git5e67120
+[ ] sockjs                            0.3.4-rmq3.1.5-git3132eb9
+[ ] webmachine                        1.10.3-rmq3.1.5-gite9359c7
+[root@controller-node home(KS_ADMIN)]#/usr/lib/rabbitmq/bin/rabbitmq-plugins enable rabbitmq_management
+The following plugins have been enabled:
+  mochiweb
+  webmachine
+  rabbitmq_web_dispatch
+  amqp_client
+  rabbitmq_management_agent
+  rabbitmq_management
+Plugin configuration has changed. Restart RabbitMQ for changes to take effect.
+[root@controller-node home(KS_ADMIN)]#/etc/init.d/rabbitmq-server restart
+Restarting rabbitmq-server: SUCCESS
+rabbitmq-server.
+[root@controller-node home(KS_ADMIN)]#chkconfig rabbitmq-server on
+
+[root@controller-node home]# yum install openstack-utils openstack-keystone python-keystoneclient
+
+[root@controller-node home]# openstack-db --init --service keystone --pass keystone
+Please enter the password for the 'root' MySQL user: 
+Verified connectivity to MySQL.
+Creating 'keystone' database.
+Initializing the keystone database, please wait...
+Complete!
+
+[root@controller-node home]# mysql -uroot -p
+Enter password: 
+mysql> create database keystone;
+Query OK, 1 row affected (0.41 sec)
+
+mysql> show create database keystone;
++----------+-------------------------------------------------------------------+
+| Database | Create Database                                                   |
++----------+-------------------------------------------------------------------+
+| keystone | CREATE DATABASE `keystone` /*!40100 DEFAULT CHARACTER SET utf8 */ |
++----------+-------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+ysql> grant all on keystone.* to keystone@'%' identified by 'keystone';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on keystone.* to keystone@'localhost' identified by 'keystone';
+Query OK, 0 rows affected (0.00 sec)
+
+[root@controller-node home]# ADMIN_TOKEN=$(openssl rand -hex 10)
+[root@controller-node home]# echo $ADMIN_TOKEN
+dfd3fe9c1742932dda2c
+[root@controller-node home]# openstack-config --set /etc/keystone/keystone.conf DEFAULT admin_token $ADMIN_TOKEN
+[root@controller-node home]# keystone role-list
+Expecting an auth URL via either --os-auth-url or env[OS_AUTH_URL]
+
+[root@controller-node home]# export SERVICE_TOKEN=dfd3fe9c1742932dda2c
+[root@controller-node home]# export SERVICE_ENDPOINT=http://controller-node.openstack.com:35357/v2.0
+[root@controller-node home]# echo $SERVICE_TOKEN > admin_token
+
+[root@controller-node home]# keystone-manage db_sync
+[root@controller-node ~]# keystone role-list
++----------------------------------+----------+
+|                id                |   name   |
++----------------------------------+----------+
+| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
++----------------------------------+----------+
+
+[root@controller-node home]# service openstack-keystone restart
+[root@controller-node home]# chkconfig openstack-keystone on
+[root@controller-node home]# ps auxf | grep -i keystone-all
+root      2394  0.0  0.0 103252   820 pts/0    S+   11:12   0:00          \_ grep -i keystone-all
+keystone  2159  0.2  2.6 380588 50844 ?        S    11:04   0:01 /usr/bin/python /usr/bin/keystone-all
+
+[root@controller-node home]# grep ERROR /var/log/keystone/keystone.log 
+[root@controller-node home]# mysql -u keystone -p keystone -e "use keystone;show tables;"
+Enter password: 
++------------------------+
+| Tables_in_keystone     |
++------------------------+
+| credential             |
+| domain                 |
+| endpoint               |
+| group                  |
+| group_domain_metadata  |
+| group_project_metadata |
+| migrate_version        |
+| policy                 |
+| project                |
+| role                   |
+| service                |
+| token                  |
+| trust                  |
+| trust_role             |
+| user                   |
+| user_domain_metadata   |
+| user_group_membership  |
+| user_project_metadata  |
++------------------------+
+[root@controller-node home]# cat /var/log/keystone/keystone.log 
+2015-03-10 15:48:56.401 1431 INFO keystone.common.environment.eventlet_server [-] Starting /usr/bin/keystone-all on 0.0.0.0:35357
+2015-03-10 15:48:56.402 1431 INFO keystone.common.environment.eventlet_server [-] Starting /usr/bin/keystone-all on 0.0.0.0:5000
+
+
+[root@controller-node home]# keystone --help | grep list
+    ec2-credentials-list
+    endpoint-list       List configured service endpoints.
+    role-list           List all roles.
+    service-list        List all services in Service Catalog.
+    tenant-list         List all tenants.
+    user-list           List users.
+    user-role-list      List roles granted to a user.
+[root@controller-node home]# keystone tenant-create --name=admin --description="Admin Tenant"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Admin Tenant           |
+|   enabled   |               True               |
+|      id     | 8e98a7aa25334228b5ba3720b67c46d7 |
+|     name    |              admin               |
++-------------+----------------------------------+
+[root@controller-node home]# keystone tenant-create --name=service --description="Service Tenant"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |          Service Tenant          |
+|   enabled   |               True               |
+|      id     | b8d5de69520a4d5aa580f26882f998a8 |
+|     name    |             service              |
++-------------+----------------------------------+
+[root@controller-node home]# keystone user-create --name=admin --pass=admin --email=admin@openstack.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |       admin@openstack.com        |
+| enabled  |               True               |
+|    id    | c55c9478f0a749f983a294e7a8b9ea5b |
+|   name   |              admin               |
++----------+----------------------------------+
+[root@controller-node home]# keystone role-create --name=admin
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|    id    | 8544262aff7e4841a038dbf9e48c769c |
+|   name   |              admin               |
++----------+----------------------------------+
+[root@controller-node home]# keystone user-role-add --user=admin --tenant=admin --role=admin
+
+[root@controller-node home]# keystone tenant-create --name demo --description "Demo Tenant"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Demo Tenant            |
+|   enabled   |               True               |
+|      id     | df98e50412304e589ae9998384136515 |
+|     name    |               demo               |
++-------------+----------------------------------+
+[root@controller-node home]# keystone user-create --name demo --tenant demo --pass demo --email demo@openstack.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |        demo@openstack.com        |
+| enabled  |               True               |
+|    id    | 3a44e48081df46c5979129985f51b7e2 |
+|   name   |               demo               |
+| tenantId | df98e50412304e589ae9998384136515 |
++----------+----------------------------------+
+
+[root@controller-node home]# keystone service-create --name=keystone --type=identity --description="Keystone Identity Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |    Keystone Identity Service     |
+|      id     | 715ba35ff68942d58a87ecac7b7fa6b3 |
+|     name    |             keystone             |
+|     type    |             identity             |
++-------------+----------------------------------+
+[root@controller-node home]# keystone endpoint-create \
+> --service-id=715ba35ff68942d58a87ecac7b7fa6b3 \
+> --publicurl=http://controller-node.openstack.com:5000/v2.0 \
+> --adminurl=http://controller-node.openstack.com:35357/v2.0 \
+> --internalurl=http://controller-node.openstack.com:5000/v2.0
++-------------+-------------------------------------------------+
+|   Property  |                      Value                      |
++-------------+-------------------------------------------------+
+|   adminurl  | http://controller-node.openstack.com:35357/v2.0 |
+|      id     |         51946dfcb6c74a768f3f2a25bf48e837        |
+| internalurl |  http://controller-node.openstack.com:5000/v2.0 |
+|  publicurl  |  http://controller-node.openstack.com:5000/v2.0 |
+|    region   |                    regionOne                    |
+|  service_id |         715ba35ff68942d58a87ecac7b7fa6b3        |
++-------------+-------------------------------------------------+
+
+[root@controller-node home]# keystone user-list
++----------------------------------+-------+---------+---------------------+
+|                id                |  name | enabled |        email        |
++----------------------------------+-------+---------+---------------------+
+| c55c9478f0a749f983a294e7a8b9ea5b | admin |   True  | admin@openstack.com |
++----------------------------------+-------+---------+---------------------+
+[root@controller-node home]# keystone role-list
++----------------------------------+----------+
+|                id                |   name   |
++----------------------------------+----------+
+| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
+| 8544262aff7e4841a038dbf9e48c769c |  admin   |
++----------------------------------+----------+
+[root@controller-node home]# keystone tenant-list
++----------------------------------+---------+---------+
+|                id                |   name  | enabled |
++----------------------------------+---------+---------+
+| 8e98a7aa25334228b5ba3720b67c46d7 |  admin  |   True  |
+| b8d5de69520a4d5aa580f26882f998a8 | service |   True  |
++----------------------------------+---------+---------+
+
+[root@controller-node home]# keystone service-list
++----------------------------------+----------+----------+---------------------------+
+|                id                |   name   |   type   |        description        |
++----------------------------------+----------+----------+---------------------------+
+| 715ba35ff68942d58a87ecac7b7fa6b3 | keystone | identity | Keystone Identity Service |
++----------------------------------+----------+----------+---------------------------+
+[root@controller-node home]# keystone endpoint-list
++----------------------------------+-----------+------------------------------------------------+------------------------------------------------+-------------------------------------------------+----------------------------------+
+|                id                |   region  |                   publicurl                    |                  internalurl                   |                     adminurl                    |            service_id            |
++----------------------------------+-----------+------------------------------------------------+------------------------------------------------+-------------------------------------------------+----------------------------------+
+| 51946dfcb6c74a768f3f2a25bf48e837 | regionOne | http://controller-node.openstack.com:5000/v2.0 | http://controller-node.openstack.com:5000/v2.0 | http://controller-node.openstack.com:35357/v2.0 | 715ba35ff68942d58a87ecac7b7fa6b3 |
++----------------------------------+-----------+------------------------------------------------+------------------------------------------------+-------------------------------------------------+----------------------------------+
+
+[root@controller-node home]# cat ks_admin_token 
+export OS_TENANT_NAME=admin
+export OS_USERNAME=admin
+export OS_PASSWORD=admin
+export OS_AUTH_URL=http://controller-node.openstack.com:35357/v2.0
+
+[root@controller-node home]# cat ks_demo_token 
+export OS_TENANT_NAME=demo
+export OS_USERNAME=demo
+export OS_PASSWORD=demo
+export OS_AUTH_URL=http://controller-node.openstack.com:5000/v2.0
+
+[root@controller-node home]# keystone token-get
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-03-13T07:48:26Z       |
+|     id    | caed360f4fbc419a83719c7a5abcfcb6 |
+| tenant_id | 8e98a7aa25334228b5ba3720b67c46d7 |
+|  user_id  | 9eca14b43b4d4be48234d6a41e0a006e |
++-----------+----------------------------------+
+[root@controller-node home]# keystone --os-username=admin --os-password=admin --os-auth-url=http://controller-node.openstack.com:35357/v2.0 token-get
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-03-13T07:49:49Z       |
+|     id    | 8199bbeb6dc745d8b5513758525e94a3 |
+| tenant_id | 8e98a7aa25334228b5ba3720b67c46d7 |
+|  user_id  | 9eca14b43b4d4be48234d6a41e0a006e |
++-----------+----------------------------------+
+[root@controller-node home]# 
+[root@controller-node home]# keystone --os-username=admin --os-password=admin --os-tenant-name=admin --os-auth-url=http://controller-node.openstack.com:35357/v2.0 token-get 
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-03-13T07:50:14Z       |
+|     id    | d85f42ce690d4a65a5c0e09b6540f13b |
+| tenant_id | 8e98a7aa25334228b5ba3720b67c46d7 |
+|  user_id  | 9eca14b43b4d4be48234d6a41e0a006e |
++-----------+----------------------------------+
+
+[root@controller-node home]# source ks_demo_token 
+[root@controller-node home]# keystone --os-tenant-name demo --os-username demo --os-password demo --os-auth-url http://controller-node.openstack.com:5000/v2.0 token-get
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-03-18T08:03:00Z       |
+|     id    | c401616b1103494291a0d0c0cccdbae8 |
+| tenant_id | df98e50412304e589ae9998384136515 |
+|  user_id  | 3a44e48081df46c5979129985f51b7e2 |
++-----------+----------------------------------+
+
+[root@controller-node home]# yum install -y openstack-glance openstack-utils python-kombu python-anyjson
+
+[root@controller-node home(KS_ADMIN)]#openstack-db --init --service glance --password glance
+Please enter the password for the 'root' MySQL user: 
+Verified connectivity to MySQL.
+Creating 'glance' database.
+
+[root@controller-node home(KS_ADMIN)]#mysql -uroot -p
+mysql> grant all on glance.* to glance@'%' identified by 'glance';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on glance.* to glance@'localhost' identified by 'glance';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on glance.* to glance@'controller-node.openstack.com' identified by 'glance';
+Query OK, 0 rows affected (0.00 sec)
+
+[root@controller-node home(KS_ADMIN)]#/etc/init.d/openstack-glance-registry start
+Starting openstack-glance-registry:                        [  OK  ]
+[root@controller-node home(KS_ADMIN)]#/etc/init.d/openstack-glance-api start
+Starting openstack-glance-api:                             [  OK  ]
+[root@controller-node home(KS_ADMIN)]#/etc/init.d/openstack-glance-scrubber start
+Starting openstack-glance-scrubber:                        [  OK  ]
+
+[root@controller-node home(KS_ADMIN)]#keystone user-create --name=glance --pass=glance --email=glance@openstack.com
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |       glance@openstack.com       |
+| enabled  |               True               |
+|    id    | a1182dda344441e2b7e279656b42a52d |
+|   name   |              glance              |
++----------+----------------------------------+
+[root@controller-node home(KS_ADMIN)]#keystone user-role-add --user=glance --tenant=service --role=admin
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
+
+[root@controller-node home(KS_ADMIN)]#mysql -u glance -p glance -e "use glance;show tables;"
+Enter password: 
++------------------+
+| Tables_in_glance |
++------------------+
+| image_members    |
+| image_properties |
+| image_tags       |
+| images           |
+| migrate_version  |
++------------------+
+
+[root@controller-node home(KS_ADMIN)]#keystone user-role-list --user admin --tenant admin
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
++----------------------------------+-------+----------------------------------+----------------------------------+
+|                id                |  name |             user_id              |            tenant_id             |
++----------------------------------+-------+----------------------------------+----------------------------------+
+| 7da5f476b53a4356bf28699e7c362f49 | admin | 9eca14b43b4d4be48234d6a41e0a006e | 8e98a7aa25334228b5ba3720b67c46d7 |
++----------------------------------+-------+----------------------------------+----------------------------------+
+[root@controller-node home(KS_ADMIN)]#keystone user-role-list --user glance --tenant service
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
++----------------------------------+-------+----------------------------------+----------------------------------+
+|                id                |  name |             user_id              |            tenant_id             |
++----------------------------------+-------+----------------------------------+----------------------------------+
+| 7da5f476b53a4356bf28699e7c362f49 | admin | a1182dda344441e2b7e279656b42a52d | b8d5de69520a4d5aa580f26882f998a8 |
++----------------------------------+-------+----------------------------------+----------------------------------+
+
+[root@controller-node home(KS_ADMIN)]#keystone service-create --name=glance --type=image --description="OpenStack Image Service"
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |     OpenStack Image Service      |
+|      id     | 3a6991c8c81741b49177780720d9aa88 |
+|     name    |              glance              |
+|     type    |              image               |
++-------------+----------------------------------+
+[root@controller-node home(KS_ADMIN)]#keystone endpoint-create \
+> --service_id=3a6991c8c81741b49177780720d9aa88 \
+> --publicurl=http://controller-node.openstack.com:9292 \
+> --internalurl=http://controller-node.openstack.com:9292 \
+> --adminurl=http://controller-node.openstack.com:9292
+WARNING: Bypassing authentication using a token & endpoint (authentication credentials are being ignored).
++-------------+-------------------------------------------+
+|   Property  |                   Value                   |
++-------------+-------------------------------------------+
+|   adminurl  | http://controller-node.openstack.com:9292 |
+|      id     |      e4f631caedcc44248053122e833ac231     |
+| internalurl | http://controller-node.openstack.com:9292 |
+|  publicurl  | http://controller-node.openstack.com:9292 |
+|    region   |                 regionOne                 |
+|  service_id |      3a6991c8c81741b49177780720d9aa88     |
++-------------+-------------------------------------------+
+
+[root@controller-node home(KS_ADMIN)]#vim /etc/glance/glance-api.conf
+
+# Allow access to version 2 of glance api
+enable_v2_api = True
+
+sql_connection=mysql://glance:glance@controller-node.openstack.com/glance
+notifier_strategy=rabbit
+
+[keystone_authtoken]
+auth_host=controller-node.openstack.com
+auth_port=35357
+auth_protocol=http
+admin_tenant_name=service
+admin_user=glance
+admin_password=glance
+
+[paste_deploy]
+config_file=/usr/share/glance/glance-api-dist-paste.ini
+flavor=keystone
+
+[root@controller-node home(KS_ADMIN)]#vim /etc/glance/glance-registry.conf
+sql_connection=mysql://glance:glance@controller-node.openstack.com/glance
+notifier_strategy=rabbit
+
+[keystone_authtoken]
+auth_host=controller-node.openstack.com
+auth_port=35357
+auth_protocol=http
+admin_tenant_name=service
+admin_user=glance
+admin_password=glance
+
+[paste_deploy]
+config_file=/usr/share/glance/glance-api-dist-paste.ini
+flavor=keystone
+
+[root@controller-node home]# /etc/init.d/openstack-glance-api restart
+Stopping openstack-glance-api:                             [  OK  ]
+Starting openstack-glance-api:                             [  OK  ]
+[root@controller-node home]# /etc/init.d/openstack-glance-registry restart
+Stopping openstack-glance-registry:                        [  OK  ]
+Starting openstack-glance-registry:                        [  OK  ]
+
+[root@controller-node home]# keystone --os-username=admin --os-password=admin --os-tenant-name=admin --os-auth-url=http://controller-node.openstack.com:35357/v2.0 user-list
++----------------------------------+--------+---------+----------------------+
+|                id                |  name  | enabled |        email         |
++----------------------------------+--------+---------+----------------------+
+| 9eca14b43b4d4be48234d6a41e0a006e | admin  |   True  | admin@openstack.com  |
+| 4da75ec107794043b2656672924359e2 | glance |   True  | glance@openstack.com |
++----------------------------------+--------+---------+----------------------+
+[root@controller-node home]# keystone --os-username=admin --os-password=admin --os-tenant-name=admin --os-auth-url=http://controller-node.openstack.com:35357/v2.0 role-list
++----------------------------------+----------+
+|                id                |   name   |
++----------------------------------+----------+
+| 9fe2ff9ee4384b1894a90878d3e92bab | _member_ |
+| 7da5f476b53a4356bf28699e7c362f49 |  admin   |
++----------------------------------+----------+
+[root@controller-node home]# keystone --os-username=admin --os-password=admin --os-tenant-name=admin --os-auth-url=http://controller-node.openstack.com:35357/v2.0 tenant-list
++----------------------------------+---------+---------+
+|                id                |   name  | enabled |
++----------------------------------+---------+---------+
+| 8e98a7aa25334228b5ba3720b67c46d7 |  admin  |   True  |
+| b8d5de69520a4d5aa580f26882f998a8 | service |   True  |
++----------------------------------+---------+---------+
+[root@controller-node home]# keystone --os-username=admin --os-password=admin --os-tenant-name=admin --os-auth-url=http://controller-node.openstack.com:35357/v2.0 token-get
++-----------+----------------------------------+
+|  Property |              Value               |
++-----------+----------------------------------+
+|  expires  |       2015-03-13T08:22:38Z       |
+|     id    | c190961124fe4048b8598432673a3ac7 |
+| tenant_id | 8e98a7aa25334228b5ba3720b67c46d7 |
+|  user_id  | 9eca14b43b4d4be48234d6a41e0a006e |
++-----------+----------------------------------+
+
+[root@controller-node home]# glance image-create --name RHEL6.6-x86-64bit --is-public true --container-format bare --disk-format qcow2 --progress < openstack-base.qcow2[=============================>] 100%
++------------------+--------------------------------------+
+| Property         | Value                                |
++------------------+--------------------------------------+
+| checksum         | c4db71d5692af2d90e36aa7f27fae711     |
+| container_format | bare                                 |
+| created_at       | 2015-03-12T08:50:49                  |
+| deleted          | False                                |
+| deleted_at       | None                                 |
+| disk_format      | qcow2                                |
+| id               | c0badab7-e44b-4f7d-b659-fc66dbc73b0d |
+| is_public        | True                                 |
+| min_disk         | 0                                    |
+| min_ram          | 0                                    |
+| name             | RHEL6.6-x86-64bit                    |
+| owner            | b8d5de69520a4d5aa580f26882f998a8     |
+| protected        | False                                |
+| size             | 5094047744                           |
+| status           | active                               |
+| updated_at       | 2015-03-12T08:52:59                  |
++------------------+--------------------------------------+
+[root@controller-node home]# glance image-list
++--------------------------------------+-------------------+-------------+------------------+------------+--------+
+| ID                                   | Name              | Disk Format | Container Format | Size       | Status |
++--------------------------------------+-------------------+-------------+------------------+------------+--------+
+| c0badab7-e44b-4f7d-b659-fc66dbc73b0d | RHEL6.6-x86-64bit | qcow2       | bare             | 5094047744 | active |
++--------------------------------------+-------------------+-------------+------------------+------------+--------+
+[root@controller-node home]# glance index
+ID                                   Name                           Disk Format          Container Format     Size          
+------------------------------------ ------------------------------ -------------------- -------------------- --------------
+c0badab7-e44b-4f7d-b659-fc66dbc73b0d RHEL6.6-x86-64bit              qcow2                bare                     5094047744
+
+
+
+[root@controller-node home]# yum install -y openstack-nova-api openstack-nova-cert openstack-nova-conductor \
+openstack-nova-console openstack-nova-novncproxy openstack-nova-scheduler python-novaclient
+[root@controller-node home]# keystone user-create --name=nova --pass=nova --email=nova@openstack.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |        nova@openstack.com        |
+| enabled  |               True               |
+|    id    | 3c5bcd4b378b4bf9a99a000b6f7ddf47 |
+|   name   |               nova               |
++----------+----------------------------------+
+[root@controller-node home]# keystone user-role-add --user=nova --tenant=service --role=admin
+[root@controller-node home]# keystone service-create --name=nova --type=compute --description="Nova Compute Service" 
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |       Nova Compute Service       |
+|      id     | af1a5db8e7b4422bb193e3819e8b290a |
+|     name    |               nova               |
+|     type    |             compute              |
++-------------+----------------------------------+
+[root@controller-node home]# keystone endpoint-create \
+> --service-id=af1a5db8e7b4422bb193e3819e8b290a \
+> --publicurl=http://controller-node.openstack.com:8774/v2/%\(tenant_id\)s \
+> --internalurl=http://controller-node.openstack.com:8774/v2/%\(tenant_id\)s \
+> --adminurl=http://controller-node.openstack.com:8774/v2/%\(tenant_id\)s
++-------------+------------------------------------------------------------+
+|   Property  |                           Value                            |
++-------------+------------------------------------------------------------+
+|   adminurl  | http://controller-node.openstack.com:8774/v2/%(tenant_id)s |
+|      id     |              4d9da8cf88c349168f00bc6c4d7f9cba              |
+| internalurl | http://controller-node.openstack.com:8774/v2/%(tenant_id)s |
+|  publicurl  | http://controller-node.openstack.com:8774/v2/%(tenant_id)s |
+|    region   |                         regionOne                          |
+|  service_id |              af1a5db8e7b4422bb193e3819e8b290a              |
++-------------+------------------------------------------------------------+
+[root@controller-node home]# openstack-db --init --service nova --password nova
+Please enter the password for the 'root' MySQL user: 
+Verified connectivity to MySQL.
+Creating 'nova' database.
+
+[root@controller-node home]# mysql -uroot -p
+mysql> grant all on nova.* to nova@'%' identified by 'nova';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on nova.* to nova@'localhost' identified by 'nova';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on nova.* to nova@'controller-node.openstack.com' identified by 'nova';
+Query OK, 0 rows affected (0.00 sec)
+
+[root@controller-node home]# for i in {api,cert,conductor,scheduler,consoleauth,novncproxy};do /etc/init.d/openstack-nova-$i start; done
+Starting openstack-nova-api:                               [  OK  ]
+Starting openstack-nova-cert:                              [  OK  ]
+Starting openstack-nova-conductor:                         [  OK  ]
+Starting openstack-nova-scheduler:                         [  OK  ]
+Starting openstack-nova-consoleauth:                       [  OK  ]
+Starting openstack-nova-novncproxy:                        [  OK  ]
+[root@controller-node home]# for i in {api,cert,conductor,scheduler,consoleauth,novncproxy};do chkconfig openstack-nova-$i on; done
+
+[root@controller-node home]# yum install novnc openstack-nova-novncproxy
+
+[root@controller-node home]# grep -e '^[a-z]' /etc/nova/nova.conf
+my_ip=10.66.8.231
+auth_strategy=keystone
+glance_host=controller-node.openstack.com
+glance_port=9292
+glance_protocol=http
+rpc_backend=nova.openstack.common.rpc.impl_kombu
+rabbit_host=controller-node.openstack.com
+rabbit_port=5672
+rabbit_use_ssl=false
+rabbit_userid=guest
+rabbit_password=guest
+rabbit_virtual_host=/
+rabbit_retry_interval=1
+rabbit_retry_backoff=2
+libvirt_type=qemu
+novncproxy_base_url=http://10.66.8.231:6080/vnc_auto.html
+xvpvncproxy_base_url=http://10.66.8.231:6081/console
+vncserver_listen=10.66.8.231
+vncserver_proxyclient_address=10.66.8.231
+vnc_enabled=true
+vnc_keymap=en-us
+admin_tenant_name=service
+admin_user=nova
+admin_password=nova
+auth_host=controller-node.openstack.com
+auth_port=35357
+auth_protocol=http
+auth_version=v2.0
+
+[root@computer-node home]# yum install -y openstack-nova-compute sysfsutils libvirt qemu-kvm
+[root@computer-node home]# service libvirtd start
+Starting libvirtd daemon:                                  [  OK  ]
+[root@computer-node home]# service messagebus start
+Starting system message bus:                               [  OK  ]
+[root@computer-node home]# service openstack-nova-compute start
+Starting openstack-nova-compute:                           [  OK  ]
+[root@computer-node home]# chkconfig libvirtd on
+[root@computer-node home]# chkconfig messagebus on
+[root@computer-node home]# chkconfig openstack-nova-compute on
+
+
+
+
+
+[root@controller-node home]# yum install memcached python-memcached mod_wsgi openstack-dashboard PyYAML
+[root@controller-node home]# vim /etc/openstack-dashboard/local_settings 
+# memcached set CACHES to something like
+CACHES = {
+   'default': {
+       'BACKEND' : 'django.core.cache.backends.memcached.MemcachedCache',
+       'LOCATION' : 'controller-node.openstack.com:11211',
+   }
+}
+
+CACHES = {
+    'default': {
+        'BACKEND' : 'django.core.cache.backends.locmem.LocMemCache'
+    }
+}
+...
+OPENSTACK_HOST = "controller-node.openstack.com"
+ALLOWED_HOSTS = ['*']
+OPENSTACK_KEYSTONE_URL = "http://%s:5000/v2.0" % OPENSTACK_HOST
+OPENSTACK_KEYSTONE_DEFAULT_ROLE = "Member"
+
+[root@controller-node home]# service httpd start
+Starting httpd:                                            [  OK  ]
+[root@controller-node home]# chkconfig httpd on
+[root@controller-node home]# service memcached start
+Starting memcached:                                        [  OK  ]
+[root@controller-node home]# chkconfig memcached on
+
+>>>>http://controller-node.openstack.com/dashboard  amdin/admin
+
+
+
+[root@controller-node home]# yum install -y openstack-neutron openstack-neutron-ml2 python-neutronclient openstack-neutron-linuxbridge
+[root@controller-node home]# mysql -uroot -p
+mysql> create database neutron;
+Query OK, 1 row affected (0.00 sec)
+
+mysql> grant all on neutron.* to neutron@'%' identified by 'neutron';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on neutron.* to neutron@'localhost' identified by 'neutron';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on neutron.* to neutron@'controller-node.openstack.com' identified by 'neutron';
+Query OK, 0 rows affected (0.00 sec)
+
+[root@controller-node home]# keystone user-create --name=neutron --pass=neutron --email=neutron@openstack.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |      neutron@openstack.com       |
+| enabled  |               True               |
+|    id    | 24e919af123e4c39924f83314d11acd9 |
+|   name   |             neutron              |
++----------+----------------------------------+
+[root@controller-node home]# keystone user-role-add --user=neutron --tenant=service --role=admin
+[root@controller-node home]# keystone service-create --name=neutron --type=network --description="OpenStack Network Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |    OpenStack Network Service     |
+|      id     | 539a417eba414ec497a389a1f914d0e0 |
+|     name    |             neutron              |
+|     type    |             network              |
++-------------+----------------------------------+
+
+[root@controller-node home]# keystone endpoint-create --service-id 539a417eba414ec497a389a1f914d0e0 --publicurl http://controller-node.openstack.com:9696 --adminurl http://controller-node.openstack.com:9696 --internalurl http://controller-node.openstack.com:9696 --region regionOne
++-------------+-------------------------------------------+
+|   Property  |                   Value                   |
++-------------+-------------------------------------------+
+|   adminurl  | http://controller-node.openstack.com:9696 |
+|      id     |      4d9e0b80e17d4cb7b0434f093f7f9694     |
+| internalurl | http://controller-node.openstack.com:9696 |
+|  publicurl  | http://controller-node.openstack.com:9696 |
+|    region   |                 regionOne                 |
+|  service_id |      539a417eba414ec497a389a1f914d0e0     |
++-------------+-------------------------------------------+
+[root@controller-node home]# keystone endpoint-create \
+> --service-id=6f1cc49522a74f6da5e372630c58e0cd \
+> --publicurl=http://controller-node.openstack.com:8776/v1/%\(tenant_id\)s \
+> --internalurl=http://controller-node.openstack.com:8776/v1/%\(tenant_id\)s \
+> --adminurl=http://controller-node.openstack.com:8776/v1/%\(tenant_id\)s
++-------------+------------------------------------------------------------+
+|   Property  |                           Value                            |
++-------------+------------------------------------------------------------+
+|   adminurl  | http://controller-node.openstack.com:8776/v1/%(tenant_id)s |
+|      id     |              3b29673f9fe748c5b4e3eedf538d45e3              |
+| internalurl | http://controller-node.openstack.com:8776/v1/%(tenant_id)s |
+|  publicurl  | http://controller-node.openstack.com:8776/v1/%(tenant_id)s |
+|    region   |                         regionOne                          |
+|  service_id |              6f1cc49522a74f6da5e372630c58e0cd              |
++-------------+------------------------------------------------------------+
+
+
+
+
+
+
+[root@controller-node home]# yum install openstack-cinder -y
+[root@controller-node home]# openstack-db --init --service cinder --password cinder
+[root@controller-node home]# mysql -uroot -p
+mysql> grant all on cinder.* to cinder@'%' identified by 'cinder';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> grant all on cinder.* to cinder@'localhost' identified by 'cinder';
+Query OK, 0 rows affected (0.00 sec)
+
+[root@controller-node home]# cinder-manage db sync
+[root@controller-node home]# mysql -u cinder -p cinder -e "use cinder;show tables;"
+Enter password: 
++--------------------------+
+| Tables_in_cinder         |
++--------------------------+
+| backups                  |
+| encryption               |
+| iscsi_targets            |
+| migrate_version          |
+| quality_of_service_specs |
+| quota_classes            |
+| quota_usages             |
+| quotas                   |
+| reservations             |
+| services                 |
+| snapshot_metadata        |
+| snapshots                |
+| transfers                |
+| volume_admin_metadata    |
+| volume_glance_metadata   |
+| volume_metadata          |
+| volume_type_extra_specs  |
+| volume_types             |
+| volumes                  |
++--------------------------+
+[root@controller-node home]# keystone user-create --name=cinder --pass=cinder --email=cinder@openstack.com
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|  email   |       cinder@openstack.com       |
+| enabled  |               True               |
+|    id    | 833133d3ade7449db4c3ec6b0bc8f074 |
+|   name   |              cinder              |
++----------+----------------------------------+
+[root@controller-node home]# keystone user-role-add --user=cinder --tenant=service --role=admin
+[root@controller-node home]# keystone service-create --name=cinder --type=volume --description="OpenStack Volume Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |     OpenStack Volume Service     |
+|      id     | 6f1cc49522a74f6da5e372630c58e0cd |
+|     name    |              cinder              |
+|     type    |              volume              |
++-------------+----------------------------------+
+
+[root@controller-node home]# grep -e '^[a-z]' /etc/cinder/cinder.conf 
+debug=true
+verbose=true
+my_ip=controller-node.openstack.com
+glance_host=$my_ip
+glance_port=9292
+enable_v2_api=true
+auth_strategy=keystone
+connection=mysql://cinder:cinder@controller-node.openstack.com/cinder
+rpc_backend=cinder.openstack.common.rpc.impl_kombu
+rabbit_host=controller-node.openstack.com
+rabbit_port=5672
+rabbit_use_ssl=false
+rabbit_userid=guest
+rabbit_password=guest
+rabbit_virtual_host=/
+rabbit_retry_interval=1
+rabbit_retry_backoff=2
+rabbit_max_retries=0
+rabbit_ha_queues=false
+glusterfs_shares_config=/etc/cinder/glusterfs_shares
+glusterfs_mount_point_base=$state_path/mnt
+volume_driver=cinder.volume.drivers.glusterfs.GlusterfsDriver
+admin_tenant_name=service
+admin_user=cinder
+admin_password=cinder
+auth_host=controller-node.openstack.com
+auth_port=35357
+auth_protocol=http
+auth_version=v2.0
+
+[root@controller-node home]# /etc/init.d/openstack-cinder-api start
+Starting openstack-cinder-api:                             [  OK  ]
+[root@controller-node home]# /etc/init.d/openstack-cinder-scheduler start
+Starting openstack-cinder-scheduler:                       [  OK  ]
+[root@controller-node home]# chkconfig openstack-cinder-api on
+[root@controller-node home]# chkconfig openstack-cinder-scheduler on
+
+[root@controller|network-node home]# yum install http://download.devel.redhat.com/brewroot/packages/glusterfs/3.6.0.52/1.el6rhs/x86_64/glusterfs-3.6.0.52-1.el6rhs.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/glusterfs/3.6.0.52/1.el6rhs/x86_64/glusterfs-api-3.6.0.52-1.el6rhs.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/glusterfs/3.6.0.52/1.el6rhs/x86_64/glusterfs-libs-3.6.0.52-1.el6rhs.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/glusterfs/3.6.0.52/1.el6rhs/x86_64/glusterfs-server-3.6.0.52-1.el6rhs.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/glusterfs/3.6.0.52/1.el6rhs/x86_64/glusterfs-fuse-3.6.0.52-1.el6rhs.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/glusterfs/3.6.0.52/1.el6rhs/x86_64/glusterfs-cli-3.6.0.52-1.el6rhs.x86_64.rpm
+[root@controller-node home]# /etc/init.d/glusterd start
+Starting glusterd:                                         [  OK  ]
+[root@controller-node home]# chkconfig glusterd on
+[root@controller-node home]# gluster peer probe network-node.openstack.com
+peer probe: success. 
+[root@controller-node home]# gluster peer status
+Number of Peers: 1
+
+Hostname: network-node.openstack.com
+Uuid: 954b6f20-7951-4e1a-b6e4-c93de00e96c5
+State: Peer in Cluster (Connected)
+[root@controller-node home]# mkdir -p /data/gluster-controller-node
+[root@network-node home]# mkdir -p /data/gluster-network-node
+[root@controller-node home]# gluster volume create test-volume replica 2 transport tcp controller-node.openstack.com:/data/gluster-controller-node network-node.openstack.com:/data/gluster-network-node force
+volume create: test-volume: success: please start the volume to access data
+[root@controller-node home]# gluster vol start test-volume
+volume start: test-volume: success
+
+[root@controller-node home]# gluster volume info
+ 
+Volume Name: test-volume
+Type: Replicate
+Volume ID: e33ff7dd-f327-4d9d-8fe1-ecbe948a9ed6
+Status: Started
+Snap Volume: no
+Number of Bricks: 1 x 2 = 2
+Transport-type: tcp
+Bricks:
+Brick1: controller-node.openstack.com:/data/gluster-controller-node
+Brick2: network-node.openstack.com:/data/gluster-network-node
+Options Reconfigured:
+performance.readdir-ahead: on
+snap-max-hard-limit: 256
+snap-max-soft-limit: 90
+auto-delete: disable
+
+modify /etc/cinder/cinder.conf
+glusterfs_shares_config=/etc/cinder/glusterfs_shares
+glusterfs_mount_point_base=$state_path/mnt
+volume_driver=cinder.volume.drivers.glusterfs.GlusterfsDriver
+
+[root@controller-node home]# cat /etc/cinder/glusterfs_shares
+controller-node.openstack.com:/test-volume
+
+[root@controller-node home]# for i in {api,scheduler,volume}; do /etc/init.d/openstack-cinder-$i restart; done
+Stopping openstack-cinder-api:                             [  OK  ]
+Starting openstack-cinder-api:                             [  OK  ]
+Stopping openstack-cinder-scheduler:                       [  OK  ]
+Starting openstack-cinder-scheduler:                       [  OK  ]
+Stopping openstack-cinder-volume:                          [  OK  ]
+Starting openstack-cinder-volume:                          [  OK  ]
+[root@controller-node home]# for i in {api,scheduler,volume}; do chkconfig openstack-cinder-$i on; done
+
+[root@controller-node home]# mount | grep gluster
+controller-node.openstack.com:/test-volume on /var/lib/cinder/mnt/1dbc245fa91bd4a70c5c786e5d23feae type fuse.glusterfs (rw,default_permissions,allow_other,max_read=131072)
+[root@controller-node home]# ls -lh /data/gluster-controller-node/
+total 0
+[root@controller-node home]# ls -lh /var/lib/cinder/mnt/1dbc245fa91bd4a70c5c786e5d23feae
+total 0
+
+[root@controller-node home]# cinder list
++----+--------+--------------+------+-------------+----------+-------------+
+| ID | Status | Display Name | Size | Volume Type | Bootable | Attached to |
++----+--------+--------------+------+-------------+----------+-------------+
++----+--------+--------------+------+-------------+----------+-------------+
+
+[root@controller-node home]# pvcreate /dev/vdb
+  Physical volume "/dev/vdb" successfully created
+[root@controller-node home]# vgcreate cinder-volume /dev/vdb
+  Volume group "cinder-volume" successfully created
+[root@controller-node home]# /etc/init.d/openstack-cinder-volume restart
+Stopping openstack-cinder-volume:                          [  OK  ]
+Starting openstack-cinder-volume:                          [  OK  ]
+[root@controller-node home]# service tgtd start
+Starting SCSI target daemon:                               [  OK  ]
+[root@controller-node home]# chkconfig openstack-cinder-volume on
+[root@controller-node home]# chkconfig tgtd on
+
+[root@controller-node home]# cinder service-list
++------------------+-------------------------------+------+---------+-------+----------------------------+
+|      Binary      |              Host             | Zone |  Status | State |         Updated_at         |
++------------------+-------------------------------+------+---------+-------+----------------------------+
+| cinder-scheduler | controller-node.openstack.com | nova | enabled |   up  | 2015-03-18T07:44:43.000000 |
+|  cinder-volume   | controller-node.openstack.com | nova | enabled |   up  | 2015-03-18T07:44:50.000000 |
++------------------+-------------------------------+------+---------+-------+----------------------------+
+[root@controller-node home]# cinder create --display-name demo-volume 10
++---------------------+--------------------------------------+
+|       Property      |                Value                 |
++---------------------+--------------------------------------+
+|     attachments     |                  []                  |
+|  availability_zone  |                 nova                 |
+|       bootable      |                false                 |
+|      created_at     |      2015-03-18T07:47:33.138254      |
+| display_description |                 None                 |
+|     display_name    |             demo-volume              |
+|          id         | 1fc772c0-ab74-4f9e-87e4-00d034c1055a |
+|       metadata      |                  {}                  |
+|         size        |                  10                  |
+|     snapshot_id     |                 None                 |
+|     source_volid    |                 None                 |
+|        status       |               creating               |
+|     volume_type     |                 None                 |
++---------------------+--------------------------------------+
+[root@controller-node home]# cinder list
++--------------------------------------+-----------+--------------+------+-------------+----------+-------------+
+|                  ID                  |   Status  | Display Name | Size | Volume Type | Bootable | Attached to |
++--------------------------------------+-----------+--------------+------+-------------+----------+-------------+
+| 1fc772c0-ab74-4f9e-87e4-00d034c1055a | available | demo-volume  |  10  |     None    |  false   |             |
++--------------------------------------+-----------+--------------+------+-------------+----------+-------------+
+[root@controller-node home]# ls -lh /var/lib/cinder/mnt/1dbc245fa91bd4a70c5c786e5d23feae/volume-1fc772c0-ab74-4f9e-87e4-00d034c1055a 
+-rw-rw-rw- 1 root root 10G Mar 18 15:47 /var/lib/cinder/mnt/1dbc245fa91bd4a70c5c786e5d23feae/volume-1fc772c0-ab74-4f9e-87e4-00d034c1055a
+
+[root@controller-node home]# ls -lh /data/gluster-controller-node/volume-1fc772c0-ab74-4f9e-87e4-00d034c1055a 
+-rw-rw-rw- 2 root root 10G Mar 18 15:47 /data/gluster-controller-node/volume-1fc772c0-ab74-4f9e-87e4-00d034c1055a
+[root@network-node home]# ls -lh /data/gluster-network-node/volume-1fc772c0-ab74-4f9e-87e4-00d034c1055a 
+-rw-rw-rw- 2 root root 10G Mar 18 15:47 /data/gluster-network-node/volume-1fc772c0-ab74-4f9e-87e4-00d034c1055a
+
+
+
+
+#####################################################################################
+****ISSUE****
+[root@controller-node home(KS_ADMIN)]#glance image-list  
+Authorization Failed: Unable to sign token. (HTTP 500)
+[root@controller-node home(KS_ADMIN)]# vim /etc/keystone/keystone.conf
+[root@controller-node home(KS_ADMIN)]# openstack-config --set /etc/keystone/keystone.conf \  
+> signing token_format UUID  
+
+[root@controller-node home(KS_ADMIN)]#glance-api --debug 
+...
+2015-03-11 12:35:57.336 9286 DEBUG glance.notifier [-] Converted strategy alias rabbit to glance.notifier.notify_kombu.RabbitStrategy __init__ /usr/lib/python2.6/site-packages/glance/notifier/__init__.py:64
+2015-03-11 12:35:57.336 9286 CRITICAL glance [-] 'glance.notifier.notify_kombu.RabbitStrategy' is not an available notifier strategy.
+[root@controller-node home(KS_ADMIN)]#yum install python-kombu
+
+TRACE glance AttributeError: 'RabbitStrategy' object has no attribute 'connection_errors
+[root@controller-node home(KS_ADMIN)]#vim /usr/lib/python2.6/site-packages/glance/notifier/notify_kombu.py
+123         #self.connection_errors = self.connection.connection_errors
+124         self.connection_errors = Exception
+
+TRACE glance.notifier.notify_kombu ImportError: No module named amqplib
+[root@controller-node home(KS_ADMIN)]#yum install python-amqplib
+
+[root@controller-node home(KS_ADMIN)]#glance image-list
+Request returned failure status.
+HTTPInternalServerError (HTTP 500)
+# Whether to automatically create the database tables.
+# Default: False
+db_auto_create = True
+
+[root@controller-node home(KS_ADMIN)]#keystone-all --config-file=/etc/keystone/keystone.conf
+2015-03-12 15:08:40.493 7749 CRITICAL keystone [-] No section 'admin' (prefixed by 'app' or 'application' or 'composite' or 'composit' or 'pipeline' or 'filter-app') found in config /etc/keystone/keystone.conf
+
+[paste_deploy]
+# Name of the paste configuration file that defines the available pipelines
+config_file = /usr/share/keystone/keystone-dist-paste.ini
+
+
+
+

@@ -1,0 +1,36 @@
+==============================create-iscsi-backend============================== 
+
+[root@localhost home]# qemu-img create -f raw iscsi-backend.raw 10G
+Formatting 'iscsi-backend.raw', fmt=raw size=10737418240
+
+[root@localhost home]# ls /dev/loop* -l
+brw-rw----. 1 root disk 7, 0 Feb 24 18:23 /dev/loop0
+brw-rw----. 1 root disk 7, 1 Feb 24 18:23 /dev/loop1
+brw-rw----. 1 root disk 7, 2 Feb 24 18:23 /dev/loop2
+brw-rw----. 1 root disk 7, 3 Feb 24 18:23 /dev/loop3
+brw-rw----. 1 root disk 7, 4 Feb 24 18:23 /dev/loop4
+brw-rw----. 1 root disk 7, 5 Feb 24 18:23 /dev/loop5
+brw-rw----. 1 root disk 7, 6 Feb 24 18:23 /dev/loop6
+brw-rw----. 1 root disk 7, 7 Feb 24 18:23 /dev/loop7
+
+[root@localhost home]# losetup /dev/loop1 iscsi-backend.raw
+
+[root@localhost home]# pvcreate /dev/loop1 
+  Writing physical volume data to disk "/dev/loop1"
+  Physical volume "/dev/loop1" successfully created
+
+[root@localhost ~]# yum install -y scsi-target-utils-1.0.14-4.el6.x86_64
+
+[root@localhost ~]# service tgtd start
+Starting SCSI target daemon:                               [  OK  ]
+
+[root@localhost ~]# tgtadm --lld iscsi --mode target --op new --tid 5 --targetname sluo && tgtadm --lld iscsi --mode logicalunit --op new --tid 5 --lun 1 --backing-store /dev/loop1  --bsoflags=direct && tgtadm --lld iscsi --op bind --mode target --tid 5 --initiator-address ALL
+[root@localhost ~]# echo $?
+0
+
+[root@dhcp-8-242 redhat]# iscsiadm --mode discovery --type sendtargets --portal 10.66.9.242 –discover
+10.66.9.242:3260,1 sluo
+
+[root@dhcp-8-242 redhat]# iscsiadm -m node -T sluo -p 10.66.9.242 --login
+Logging in to [iface: default, target: sluo, portal: 10.66.9.242,3260]
+Login to [iface: default, target: sluo, portal: 10.66.9.242,3260] successful.

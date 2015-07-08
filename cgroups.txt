@@ -1,0 +1,142 @@
+==================================cgroups==================================
+1.freeze/unfreeze(thaw) the guest task.
+---------------------------------------
+# mkdir /mnt/cgroup
+# mount -t cgroup -o freezer none /mnt/cgroup
+# cd /mnt/cgroup
+boot guest and create a child cgroup:
+# mkdir /mnt/cgroup/freezer
+put qemu-kvm task(contain threads) into this cgroup:
+# ps -eLf | grep qemu-kvm  To get the LWP (thread ID)
+# echo `$thread ID` > /mnt/cgroup/freezer/tasks
+freeze the task:
+# echo FROZEN > /mnt/cgroup/freezer/freezer.state
+unfreeze (thaw) the task:
+# echo THAWED > /mnt/cgroup/freezer/freezer.state
+
+2.limit blkio throttle.
+-----------------------
+# mkdir /cgroup
+# mount -t cgroup -o blkio blkio /cgroup
+# cd /cgroup
+create cgroup.
+# mkdir blkio1
+create a lvm.
+# qemu-img create -f raw cgroup.raw 10G
+# losetup -f
+# losetup /dev/loop0 cgroup.raw
+# pvcreate /dev/loop0
+# vgcreate vg /dev/loop0
+# lvcreate -L 5G -n lv vg
+get the Major and Minor Number for lvm.
+# ls -l /dev/vg/lv 
+lrwxrwxrwx. 1 root root 7 May  3 19:55 /dev/vg/lv -> ../dm-5
+# ls -l /dev/dm-5
+brw-rw----. 1 root disk 253, 5 May  5 20:40 /dev/dm-5
+limit throttle using '<major>:<minor>  <byes_per_second>'.
+# echo 253:5 1024 > blkio.throttle.read_bps_device
+# echo 253:5 1024 > blkio.throttle.write_bps_device
+boot a guest attached the lvm.
+echo `pidof qemu-kvm` > tasks (contain threads)
+run dd in guest.
+# dd if=/dev/zero of=/dev/vdb bs=1M count=1000
+
+3.deny certain device.
+----------------------
+Implement a cgroup to track and enforce open and mknod restrictions on device files.  A device cgroup associates a device access whitelist with each cgroup.  A whitelist entry has 4 fields. 'type' is a (all), c (char), or b (block).  'all' means it applies to all types and all major and minor numbers.  Major and minor are either an integer or * for all.  Access is a composition of r (read), w (write), and m (mknod).
+
+# mkdir /mnt/cgroup
+# mount -t cgroup -o devices none /mnt/cgroup
+# cd /mnt/cgroup
+create sub-cgroup.
+# mkdir devices
+create a lvm.
+# qemu-img create -f raw cgroup.raw 10G
+# losetup -f
+# losetup /dev/loop0 cgroup.raw
+# pvcreate /dev/loop0
+# vgcreate vg /dev/loop0
+# lvcreate -L 5G -n lv vg
+deny the lvm.
+# ls -l /dev/vg/lv
+# ls -l /dev/dm-3
+# echo a > devices/devices.allow
+# echo 'b 253:3 rwm' > devices/devices.deny
+can not boot guest with lvm successfully.
+<CLI>-drive file=/dev/vg/lv,format=raw,if=none,id=data-disk,cache=none,werror=stop,rerror=stop -device virtio-blk-pci,drive=data-disk,id=blk_data
+can boot guest without lvm successfully.
+
+4.check the QEMU thread / proceed ID.
+-------------------------------------
+# ps -eLf | grep qemu <-- thread
+# ps -aux | grep qemu <-- proceed
+
+5.CFS bandwidth control.
+------------------------
+FS bandwidth control is a group scheduler extension that can be used to control the maximum CPU bandwidth obtained by a CPU cgroup.
+cpu.cfs_period_us: period over which bandwidth is to be regulated.
+cpu.cfs_quota_us: bandwidth available for consumption per period.
+cpu.stat: statistics (such as number of throttled periods and total throttled time).
+
+6.exact meaning of every field in /proc/stat file
+1) - user: normal processes executing in user mode
+2) - nice: niced processes executing in user mode
+3) - system: processes executing in kernel mode
+4) - idle: twiddling thumbs
+5) - iowait: waiting for I/O to complete
+6) - irq: servicing interrupts
+7) - softirq: servicing softirqs
+8) - steal: involuntary wait
+9) - guest: running a normal guest
+10) - guest_nice: running a niced guest
+
+
+
+1. Need to install libcgroup package and make sure libcgroup>=0.36.1-6(support lscgroup)
+# yum install libcgroup* -y
+2. mount cgroup filesystem
+a. check whether cgroup filesystem has been mounted using lscgroup or cat
+/proc/mounts|grep cgroup
+# lscgroup
+OR
+# cat /proc/mounts|grep cgroup
+b. check cgroup configuration file
+#cat /etc/cgconfig.conf|tail -11
+c. if cgroup filesystem hasn't been mounted, mounts it
+#service cgconfig start
+OR
+# cgconfigparser -l /etc/cgconfig.conf
+Note that, you probably need to restart guest if your guest has ever been
+controlled by cgroup.  
+OR manually mount cgroup filesystem
+# mkdir /cgroup
+# mount -t cgroup -o devices,cpu none /cgroup
+3. check whether cgroup filesystem has been mounted
+# lscgroup
+OR
+# lssubsys
+OR
+# ll /cgroup/
+OR
+# cat /proc/mounts|grep cgroup
+
+Note:
+If you finished cgroup related test, you can issue the following commands to clean cgroup environment:
+a. remove cgroup
+# service cgconfig stop
+Stopping cgconfig service:                                 [  OK  ]
+OR
+# cgclear (provided by libcgroup-tools RPM)
+OR manually remove
+b. check whether remove successfully cgroup filesystem including libvirt group
+# lscgroup
+cgroups can't be listed: Cgroup is not mounted
+OR
+# lssubsys
+OR
+# ll /cgroup/
+total 0
+OR
+# cat /proc/mounts|grep cgroup
+For qemu driver, Libvirt only supports cpu and device controller now, for lxc driver, I need to add new test items in the future.
+

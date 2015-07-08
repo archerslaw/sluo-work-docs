@@ -1,0 +1,7 @@
+==================================numa==================================
+1.check whether host whether support numa
+ # cat /proc/buddyinfo
+2.check the qemu process's numa info: 
+ # cat /proc/<qemu_ID>/numa_smaps
+3.boot up guest with -numa node.
+ # <qemu-kvm-cmd> -numa node,mem=x,cpus=y,nodeid=z...

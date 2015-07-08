@@ -1,0 +1,73 @@
+==================================image streaming==================================
+Copy data from a backing file into a block device, the block streaming operation is performed in the background until the entire backing file has been copied. 
+1.on successful completion the image file is updated to drop the backing file.
+------------------------------------------------------------------------------
+(qemu) snapshot_blkdev $device_id $path qcow2
+(qemu) block-stream $device_id
+(qemu) info block
+{"execute":"blockdev-snapshot-sync","arguments":{"device":"data-disk","snapshot-file":"/home/sn-1","format":"qcow2"}}
+{ "execute": "block-stream", "arguments": { "device": "data-disk" }}
+{ "execute": "query-block-jobs", "arguments": {} }
+
+2.cancel an active block streaming operation.
+-------------------------------------------
+(qemu) snapshot_blkdev $device_id $path qcow2
+(qemu) block-stream $device_id
+(qemu) block-job-cancel $device_id
+
+-> { "execute": "block-job-cancel", "arguments": { "device": "virtio0" } }
+<- { "return":  {} }
+
+stop guest during image streaming.
+----------------------------------
+(qemu) snapshot_blkdev $device_id $path qcow2
+(qemu) block-stream $device_id
+(qemu) stop
+
+3.how live block copy works.
+----------------------------
+ live block copy does the following:
+ 1).create and switch to the destination file: (qemu) snapshot_blkdev $device_id $path.$fmt $fmt
+ 2).stream the base into the image file: (qemu) block-stream -a $device_id 
+
+4.start a background streaming operation.
+----------------------------------------
+ (qemu) block-stream $device_id
+5.check the status of the operation and show progress of ongoing block device operations.
+-----------------------------------------------------------------------------------------
+ (qemu) info block-jobs
+HMP monitor:
+(qemu) snapshot_blkdev drive-virtio-disk0 /root/sn1 qcow2
+(qemu) block-stream drive-virtio-disk0
+(qemu) block-job-set-speed drive-virtio-disk0 200M
+(qemu) info block-jobs
+Streaming device drive-virtio-disk0: Completed 679477248 of 21474836480 bytes, speed limit 209715200 bytes/s
+(qemu) block-job-cancel drive-virtio-disk0
+(qemu) info block-jobs
+No active jobs
+QMP interface:
+{"execute": "qmp_capabilities"}
+{"return": {}}
+{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "drive-virtio-disk0","snapshot-file":"/root/sn1","format": "qcow2" } }
+{"return": {}}
+{ "execute": "block-stream", "arguments": { "device": "drive-virtio-disk0" } }
+{"return": {}}
+{ "execute": "block-job-set-speed", "arguments": { "device": "drive-virtio-disk0", "speed": 209715200 } }
+{"return": {}}
+{ "execute": "query-block-jobs", "arguments": {} }
+{"return": [{"device": "drive-virtio-disk0", "len": 21474836480, "offset": 605028352, "speed": 209715200, "type": "stream"}]}
+{ "execute": "block-job-cancel", "arguments": { "device": "drive-virtio-disk0" } }
+{"timestamp": {"seconds": 1335426669, "microseconds": 715579}, "event": "BLOCK_JOB_CANCELLED", "data": {"device": "drive-virtio-disk0", "len": 21474836480, "offset": 656932864, "speed": 1024, "type": "stream"}}
+{"return": {}}
+{ "execute": "query-block-jobs", "arguments": {} }
+{"return": []}
+
+6.When do block_stream, specify a existed snapshot in snapshot chain as base, after job finish, current backing file should be the snapshot specified.
+e.g.base->sn1->sn2->sn3
+(qemu) snapshot_blkdev $device_id $path qcow2
+(qemu) block_stream $device_id $speed $base
+// info block and qemu-img info should show backing file is "base".
+
+
+
+

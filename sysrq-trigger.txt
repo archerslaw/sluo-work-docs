@@ -1,0 +1,32 @@
+==========================/proc/sysrq-trigger文件的强大功能==========================
+
+/proc/sysrq-trigger该文件能做些什么事情呢？ 
+
+# 立即重新启动计算机 （Reboots the kernel without first unmounting file systems or syncing disks attached to the system）
+echo "b" > /proc/sysrq-trigger
+
+# 立即关闭计算机（shuts off the system）
+echo "o" > /proc/sysrq-trigger
+
+# 导出内存分配的信息 （可以用/var/log/message 查看）（Outputs memory statistics to the console） 
+echo "m" > /proc/sysrq-trigger
+
+# 导出当前CPU寄存器信息和标志位的信息（Outputs all flags and registers to the console）
+echo "p" > /proc/sysrq-trigger
+
+# 导出线程状态信息 （Outputs a list of processes to the console）
+echo "t" > /proc/sysrq-trigger
+
+# 故意让系统崩溃 （ Crashes the system without first unmounting file systems or syncing disks attached to the system）
+echo "c" > /proc/sysrq-trigger
+
+# 立即重新挂载所有的文件系统 （Attempts to sync disks attached to the system）
+echo "s" > /proc/sysrq-trigger
+
+# 立即重新挂载所有的文件系统为只读 （Attempts to unmount and remount all file systems as read-only）
+echo "u" > /proc/sysrq-trigger
+
+呵呵，此外还有两个，类似于强制注销的功能
+e — Kills all processes except init using SIGTERM
+i — Kills all processes except init using SIGKILL
+

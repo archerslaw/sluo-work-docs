@@ -1,0 +1,21 @@
+============handle automation in manual part============
+
+Work flow about how to handle automated/autoproposed/convert manual to automated (Manual parts to do)
+1.confirm to auto guys before file bug
+2.     Priority    Severity    level
+ 2.1. High       high      Must have
+ 2.2  medium     medium    Required
+ 2.3  low        low       Nice to have
+ 3.Summary
+ 3.1 Start with [KVM_AUTOTEST] for automation scripts errors
+ 3.2 start with [KVM_AUTOTEST] RFE: for proposing to automate test cases
+ 3.2 keep concise is highly recommended
+ 4.Bug content
+must paste the tcms tese case id accordingly
+ 5. after file bug,do two things
+ 5.1change tcms automated status as Autoproposed
+ 5.2write "this testcase is candidate for automation.bz...." in note.
+ 6.after bug is fixed,do three things
+ 6.1 change tcms automated status as Automated
+ 6.2paste auto scripts.
+ 6.3.change note context as this testcase is automated.bz....

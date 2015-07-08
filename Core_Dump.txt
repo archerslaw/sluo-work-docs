@@ -1,0 +1,220 @@
+=======================Core_Dump=======================
+[root@localhost home]# ulimit -a
+core file size          (blocks, -c) 0
+data seg size           (kbytes, -d) unlimited
+scheduling priority             (-e) 0
+file size               (blocks, -f) unlimited
+pending signals                 (-i) 62484
+max locked memory       (kbytes, -l) 64
+max memory size         (kbytes, -m) unlimited
+open files                      (-n) 1024
+pipe size            (512 bytes, -p) 8
+POSIX message queues     (bytes, -q) 819200
+real-time priority              (-r) 0
+stack size              (kbytes, -s) 10240
+cpu time               (seconds, -t) unlimited
+max user processes              (-u) 1024
+virtual memory          (kbytes, -v) unlimited
+file locks                      (-x) unlimited
+[root@localhost home]# ulimit -c unlimited
+[root@localhost home]# vim /etc/profile
+[root@localhost home]# cat /proc/sys/kernel/core_pattern 
+core
+[root@localhost home]# echo "/home/core" > /proc/sys/kernel/core_pattern
+[root@localhost home]# cat /proc/sys/kernel/core_pattern 
+/home/core
+[root@localhost home]# /usr/libexec/qemu-kvm &
+[1] 5408
+[root@localhost home]# VNC server running on `::1:5900'
+
+[root@localhost home]# kill -s SIGABRT 5408
+[root@localhost home]# ls /home/
+core.5408                                                 qemu-kvm-0.12.1.2-2.265.el6rhev     seabios-0.6.1.2-11.el6.x86_64.rpm
+en_windows_7_ultimate_with_sp1_x64_dvd_618240.iso         rhel_1.qcow2                        seabios-0.6.1.2-15.el6.x86_64.rpm
+initrd.img                                                rhel_2.qcow2                        stress-0.18.8-1.3.EL6.x86_64.rpm
+iozone-3-5.el5.x86_64.rpm                                 rhel_3.qcow2                        virtio-win-prewhql-0.1-23.vfd
+kernel-debuginfo-2.6.32-251.el6.x86_64.rpm                rhel_4.qcow2                        vmlinuz
+kernel-debuginfo-common-x86_64-2.6.32-251.el6.x86_64.rpm  rhel6.3_20120313_x86_64_copy.qcow2
+lv_seabios                                                scp_tools
+[1]+  Aborted                 (core dumped) /usr/libexec/qemu-kvm
+[root@localhost home]# gdb /usr/libexec/qemu-kvm /home/core.5408 
+GNU gdb (GDB) Red Hat Enterprise Linux (7.2-52.el6)
+Copyright (C) 2010 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "x86_64-redhat-linux-gnu".
+For bug reporting instructions, please see:
+<http://www.gnu.org/software/gdb/bugs/>...
+Reading symbols from /usr/libexec/qemu-kvm...Reading symbols from /usr/lib/debug/usr/libexec/qemu-kvm.debug...done.
+done.
+[New Thread 5408]
+[New Thread 5410]
+Reading symbols from /lib64/librt.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/librt.so.1
+Reading symbols from /lib64/libpthread.so.0...(no debugging symbols found)...done.
+[Thread debugging using libthread_db enabled]
+Loaded symbols for /lib64/libpthread.so.0
+Reading symbols from /lib64/libglib-2.0.so.0...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libglib-2.0.so.0
+Reading symbols from /lib64/libaio.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libaio.so.1
+Reading symbols from /usr/lib64/libusbredirparser.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libusbredirparser.so.0
+Reading symbols from /lib64/libutil.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libutil.so.1
+Reading symbols from /lib64/libasound.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libasound.so.2
+Reading symbols from /usr/lib64/libpulse.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libpulse.so.0
+Reading symbols from /usr/lib64/libpulse-simple.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libpulse-simple.so.0
+Reading symbols from /usr/lib64/libsasl2.so.2...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libsasl2.so.2
+Reading symbols from /usr/lib64/libgnutls.so.26...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libgnutls.so.26
+Reading symbols from /usr/lib64/libspice-server.so.1...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libspice-server.so.1
+Reading symbols from /lib64/libm.so.6...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libm.so.6
+Reading symbols from /lib64/libz.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libz.so.1
+Reading symbols from /lib64/libc.so.6...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libc.so.6
+Reading symbols from /lib64/ld-linux-x86-64.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/ld-linux-x86-64.so.2
+Reading symbols from /lib64/libdl.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libdl.so.2
+Reading symbols from /usr/lib64/libpulsecommon-0.9.21.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libpulsecommon-0.9.21.so
+Reading symbols from /usr/lib64/libX11.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libX11.so.6
+Reading symbols from /usr/lib64/libSM.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libSM.so.6
+Reading symbols from /usr/lib64/libICE.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libICE.so.6
+Reading symbols from /usr/lib64/libXtst.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libXtst.so.6
+Reading symbols from /lib64/libwrap.so.0...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libwrap.so.0
+Reading symbols from /usr/lib64/libsndfile.so.1...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libsndfile.so.1
+Reading symbols from /usr/lib64/libasyncns.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libasyncns.so.0
+Reading symbols from /lib64/libdbus-1.so.3...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libdbus-1.so.3
+Reading symbols from /lib64/libresolv.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libresolv.so.2
+Reading symbols from /lib64/libcrypt.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libcrypt.so.1
+Reading symbols from /usr/lib64/libtasn1.so.3...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libtasn1.so.3
+Reading symbols from /lib64/libgcrypt.so.11...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libgcrypt.so.11
+Reading symbols from /usr/lib64/libcelt051.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libcelt051.so.0
+Reading symbols from /usr/lib64/libjpeg.so.62...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libjpeg.so.62
+Reading symbols from /usr/lib64/libpixman-1.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libpixman-1.so.0
+Reading symbols from /usr/lib64/libssl.so.10...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libssl.so.10
+Reading symbols from /usr/lib64/libcrypto.so.10...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libcrypto.so.10
+Reading symbols from /usr/lib64/libxcb.so.1...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libxcb.so.1
+Reading symbols from /lib64/libuuid.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libuuid.so.1
+Reading symbols from /usr/lib64/libXext.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libXext.so.6
+Reading symbols from /usr/lib64/libXi.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libXi.so.6
+Reading symbols from /lib64/libnsl.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libnsl.so.1
+Reading symbols from /usr/lib64/libFLAC.so.8...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libFLAC.so.8
+Reading symbols from /usr/lib64/libvorbisenc.so.2...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libvorbisenc.so.2
+Reading symbols from /usr/lib64/libvorbis.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libvorbis.so.0
+Reading symbols from /usr/lib64/libogg.so.0...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libogg.so.0
+Reading symbols from /lib64/libfreebl3.so...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libfreebl3.so
+Reading symbols from /lib64/libgpg-error.so.0...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libgpg-error.so.0
+Reading symbols from /lib64/libgssapi_krb5.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libgssapi_krb5.so.2
+Reading symbols from /lib64/libkrb5.so.3...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libkrb5.so.3
+Reading symbols from /lib64/libcom_err.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libcom_err.so.2
+Reading symbols from /lib64/libk5crypto.so.3...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libk5crypto.so.3
+Reading symbols from /usr/lib64/libXau.so.6...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/libXau.so.6
+Reading symbols from /lib64/libkrb5support.so.0...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libkrb5support.so.0
+Reading symbols from /lib64/libkeyutils.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libkeyutils.so.1
+Reading symbols from /lib64/libselinux.so.1...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libselinux.so.1
+Reading symbols from /usr/lib64/sasl2/libplain.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/libplain.so
+Reading symbols from /usr/lib64/sasl2/libsasldb.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/libsasldb.so
+Reading symbols from /lib64/libdb-4.7.so...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libdb-4.7.so
+Reading symbols from /usr/lib64/sasl2/libcrammd5.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/libcrammd5.so
+Reading symbols from /usr/lib64/sasl2/libgssapiv2.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/libgssapiv2.so
+Reading symbols from /usr/lib64/sasl2/libdigestmd5.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/libdigestmd5.so
+Reading symbols from /usr/lib64/sasl2/libanonymous.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/libanonymous.so
+Reading symbols from /usr/lib64/sasl2/liblogin.so...(no debugging symbols found)...done.
+Loaded symbols for /usr/lib64/sasl2/liblogin.so
+Reading symbols from /lib64/libnss_files.so.2...(no debugging symbols found)...done.
+Loaded symbols for /lib64/libnss_files.so.2
+Reading symbols from /lib/modules/2.6.32-251.el6.x86_64/vdso/vdso.so...Reading symbols from /usr/lib/debug/lib/modules/2.6.32-251.el6.x86_64/vdso/vdso.so.debug...done.
+done.
+Loaded symbols for /lib/modules/2.6.32-251.el6.x86_64/vdso/vdso.so
+Core was generated by `/usr/libexec/qemu-kvm'.
+Program terminated with signal 6, Aborted.
+#0  0x00007f4f70cc8193 in select () from /lib64/libc.so.6
+Missing separate debuginfos, use: debuginfo-install alsa-lib-1.0.22-3.el6.x86_64 celt051-0.5.1.3-0.el6.x86_64 cyrus-sasl-gssapi-2.1.23-13.el6.x86_64 cyrus-sasl-lib-2.1.23-13.el6.x86_64 cyrus-sasl-md5-2.1.23-13.el6.x86_64 cyrus-sasl-plain-2.1.23-13.el6.x86_64 db4-4.7.25-16.el6.x86_64 dbus-libs-1.2.24-5.el6_1.x86_64 flac-1.2.1-6.1.el6.x86_64 glib2-2.22.5-7.el6.x86_64 glibc-2.12-1.75.el6.x86_64 gnutls-2.8.5-4.el6.x86_64 keyutils-libs-1.4-4.el6.x86_64 krb5-libs-1.9-31.el6.x86_64 libICE-1.0.6-1.el6.x86_64 libSM-1.1.0-7.1.el6.x86_64 libX11-1.3-2.el6.x86_64 libXau-1.0.5-1.el6.x86_64 libXext-1.1-3.el6.x86_64 libXi-1.3-3.el6.x86_64 libXtst-1.0.99.2-3.el6.x86_64 libaio-0.3.107-10.el6.x86_64 libasyncns-0.8-1.1.el6.x86_64 libcom_err-1.41.12-12.el6.x86_64 libgcrypt-1.4.5-9.el6.x86_64 libgpg-error-1.7-4.el6.x86_64 libjpeg-6b-46.el6.x86_64 libogg-1.1.4-2.1.el6.x86_64 libselinux-2.0.94-5.3.el6.x86_64 libsndfile-1.0.20-5.el6.x86_64 libtasn1-2.3-3.el6.x86_64 libuuid-2.17.2-12.5.el6.x86_64 libvorbis-1.2.3-4.el6_2.1.x86_64 libxcb-1.5-1.el6.x86_64 nss-softokn-freebl-3.12.9-11.el6.x86_64 openssl-1.0.0-20.el6_2.2.x86_64 pixman-0.18.4-1.el6_0.1.x86_64 pulseaudio-libs-0.9.21-13.el6.x86_64 spice-server-0.10.1-4.el6.x86_64 tcp_wrappers-libs-7.6-57.el6.x86_64 usbredir-0.4.2-1.el6.x86_64 zlib-1.2.3-27.el6.x86_64
+(gdb) bt
+#0  0x00007f4f70cc8193 in select () from /lib64/libc.so.6
+#1  0x00007f4f7328d0c0 in main_loop_wait (timeout=1000) at /usr/src/debug/qemu-kvm-0.12.1.2/vl.c:3983
+#2  0x00007f4f732ae86a in kvm_main_loop () at /usr/src/debug/qemu-kvm-0.12.1.2/qemu-kvm.c:2244
+#3  0x00007f4f7328fc9c in main_loop (argc=20, argv=<value optimized out>, envp=<value optimized out>) at /usr/src/debug/qemu-kvm-0.12.1.2/vl.c:4202
+#4  main (argc=20, argv=<value optimized out>, envp=<value optimized out>) at /usr/src/debug/qemu-kvm-0.12.1.2/vl.c:6427
+(gdb) q
+
+
+[root@localhost home]# echo "/home/core.%e.%p.%h.%t" > /proc/sys/kernel/core_pattern
+[root@localhost home]# /usr/libexec/qemu-kvm &
+[1] 6681
+[root@localhost home]# VNC server running on `::1:5900'
+
+[root@localhost home]# 
+[root@localhost home]# kill -s SIGABRT 6681
+[root@localhost home]# 
+[1]+  Aborted                 (core dumped) /usr/libexec/qemu-kvm
+[root@localhost home]# ls /home/core.
+core.5408                                            core.qemu-kvm.6681.localhost.localdomain.1333025921  
+[root@localhost home]# ls /home/core.* -lt
+-rw-------. 1 root root 179134464 Mar 29 20:58 /home/core.qemu-kvm.6681.localhost.localdomain.1333025921
+-rw-------. 1 root root 179134464 Mar 29 20:55 /home/core.5408
+
+
+[root@localhost home]# vim /etc/profile
+[root@localhost home]# vim /root/.bash_profile 
+
+So, if we need to configure the core dump format, add the command line as following to the /etc/profile files.
+ulimit -c unlimited
+echo "/var/core.%p-%u-%g-%s-%t-%h-%e" > /proc/sys/kernel/core_pattern
+
+

@@ -1,0 +1,29 @@
+==================================storage_vm_migration_nbd==================================
+Note: Despite image file in destination host is qcow2/raw, the format in mirroring command should be raw, check after storage vm migration, the image file in destination should not change.
+1.boot qemu-kvm on des host with a empty disk (do two times, once with raw, once with qcow2) and "-incoming tcp:0:$port_cli,server,nowait" and qmp connection.
+2.on des host, create NBD server, and export the empty disk:
+{ "execute": "qmp_capabilities" }
+{"return": {}}
+{ "execute": "nbd-server-start", "arguments": { "addr": { "type": "inet", "data": { "host": "$dest_ip_addr", "port": "$port" } } } }
+{"return": {}}
+
+{ "execute": "nbd-server-add", "arguments": { "device": "drive-virtio-disk0", "writable": true } }
+{"return": {}}
+or:(qemu) nbd_server_add -w $drive-virtio-disk0
+
+3.on src host, start mirroring to the remote NBD disk in step 2, note here no matter in step 1 using raw or qcow2, "format" should be raw:
+{ "execute": "drive-mirror", "arguments": { "device": "drive-virtio-disk0", "target": "nbd://$dest_ip_addr:$port/drive-virtio-disk0", "sync": "full", "format": "raw", "mode": "existing" } }
+4.after mirroring reaching steady state:
+{ "execute" : "query-block-jobs", "arguments" : {} }
+{"return": [{"device": "drive-virtio-disk0", "len": 10737418240, "offset": 10737418240, "speed": 0, "type": "mirror"}]}
+or:(qemu) info block-jobs
+5.start migration on src host:
+{"execute": "migrate","arguments":{"uri": "tcp:$dest_host_ip:$port_cli"}}
+6.after migration finishes,check guest works correctly on des.
+7.cancel job in src host
+e.g:{"execute":"block-job-cancel","arguments":{"device":"drive-scsi0-0-0-0"},"id":"libvirt-280"}
+7.quit qemu-kvm on src host, and stop NBD server on des host.
+{ "execute": "nbd-server-stop", "arguments": { } }
+8.reboot guest, guest should work correctly.
+9.check guest image format, they should not change, in step 1 if use qcow2, now it should still be qcow2, the same to raw.
+

@@ -1,0 +1,74 @@
+- 5 Methods to Identify Your Linux File System Type (Ext2 or Ext3 or Ext4 or XFS).
+
+Method 1: Use df -T Command
+
+The -T option in the df command displays the file system type.
+
+# df -T | awk '{print $1,$2,$NF}' | grep "^/dev"
+/dev/sda1 ext2 /
+/dev/sdb1 ext3 /home
+/dev/sdc1 ext3 /u01
+
+Method 2: Use Mount Command
+
+Use the mount command as shown below.
+
+# mount | grep "^/dev"
+/dev/sda1 on / type ext2 (rw)
+/dev/sdb1 on /home type ext3 (rw)
+/dev/sdc1 on /u01 type ext3 (rw)
+
+As shown in the above example:
+
+    /dev/sda1 is ext2 file system type. (mounted as /)
+    /dev/sdb1 is ext3 file system type. (mounted as /home)
+    /dev/sdc1 is ext3 file system type. (mounted as /u01)
+
+Method 3: Use file Command
+
+As root, use the file command as shown below. You need to pass the individual device name to the file command.
+
+# file -sL /dev/sda1
+/dev/sda1: Linux rev 1.0 ext2 filesystem data (mounted or unclean) (large files)
+
+# file -sL /dev/sdb1
+/dev/sda1: Linux rev 1.0 ext3 filesystem data (needs journal recovery)(large files)
+
+# file -sL /dev/sdc1
+/dev/sda1: Linux rev 1.0 ext3 filesystem data (needs journal recovery)(large files)
+
+Note: You should execute the file command as root user. If you execute as non-root user, you’ll still get some output. But, that will not display the file system type as shown below.
+
+$ file -sL /dev/sda1
+/dev/sda1: writable, no read permission
+
+Method 4: View the /etc/fstab file
+
+If a particular mount point is configured to be mounted automatically during system startup, you can identify its file system type by looking at the /etc/fstab file.
+
+As shown in the example below, / is ext2, /home is ext3, and /u01 is ext3.
+
+# cat /etc/fstab
+LABEL=/r       /        ext2    defaults    1 1
+LABEL=/home    /home    ext3    defaults    0 0
+LABEL=/u01     /u01     ext3    defaults    0 0
+
+Method 5: Use fsck Command
+
+Execute the fsck command as shown below. This will display the file system type of a given device.
+
+# fsck -N /dev/sda1
+fsck 1.39 (29-May-2006)
+[/sbin/fsck.ext2 (1) -- /] fsck.ext2 /dev/sda1
+
+# fsck -N /dev/sdb1
+fsck 1.39 (29-May-2006)
+[/sbin/fsck.ext3 (1) -- /home] fsck.ext3 /dev/sdb1
+
+# fsck -N /dev/sdc1
+fsck 1.39 (29-May-2006)
+[/sbin/fsck.ext3 (1) -- /u01] fsck.ext3 /dev/sdc1
+
+If you don’t have the root access, but would like to identify your file system type, use /sbin/fsck -N as shown above.
+
+

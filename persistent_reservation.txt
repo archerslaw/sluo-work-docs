@@ -1,0 +1,92 @@
+Note: we can only use "2101001b32a9da4e" and "2100001b32a9da4e" as wwnn NUM; and can use "2101001b32a90001" "2101001b32a90002" "2101001b32a90003" "2101001b32a90004" as wwpn NUM, to create vHBAs.
+
+● For persistent reservation. (HBA Host: dell-pet105-04.qe.lab.eng.nay.redhat.com)
+1.The initiator name is the name that is saved for the persistent reservation, if you start two guests, the persistent reservation should not move from the first to the second.
+2.We create the vHBA outside QEMU, then just pass the LUN as seen in the vHBA using /dev/disk/by-path, for both NPIV and iSCSI it is "SCSI passthrough" (scsi-block).
+3.For rhel6.x just test NPIV, for rhel7 need to test NPIV and iSCSI for this feature.
+4.Since lots of scsi command(sg_xxx) have been supported, Only TRIM and persistent reservations need a separate test.
+5.Why use NPIV:
+N_Port ID Virtualization (NPIV) is a function available with some Fibre Channel devices. NPIV shares a single physical N_Port as multiple N_Port IDs. NPIV provides similar functionality for Host Bus Adaptors (HBAs) that SR-IOV provides for network interfaces. With NPIV, guests can be provided with a virtual Fibre Channel initiator to Storage Area Networks (SANs). N_Ports are addressed with a 24 bit N_Port ID, which is assigned by the Fibre Channel switch.
+(1).Without NPIV guests must share an HBA's WWN on the SAN. With NPIV, it is possible to use LUN masking and zoning for guest.
+(2).With NPIV migration with zones and LUN masking is possible.
+(3).Physical HBAs are expensive and use an expansion slot. With NPIV, more guests can access SAN resources and guest density can be increased.
+Each N_Port has a unique identity (port WWN and node WWN) on the SAN and can be used for zoning and LUN masking. Soft zoning, which you can use to group ports together by port WWN, is the preferred method of zoning.
+NPIV: N-PortID Virtualization
+SAN: storage area network
+HBA: Host Bus Adapter
+WWN: WorldWide Name
+WWNN: WorldWide Node Name
+WWPN: WorldWide Port Name
+6.How to use FC vHBA with KVM-QEMU.
+(1).Before create vHBA.
+# ls -lh /dev/disk/by-path/pci-0000\:04\:00.1-fc-0x203*
+lrwxrwxrwx. 1 root root 9 May 21 01:13 /dev/disk/by-path/pci-0000:04:00.1-fc-0x203400a0b85ad1d7-lun-0 -> ../../sdc
+lrwxrwxrwx. 1 root root 9 May 21 01:13 /dev/disk/by-path/pci-0000:04:00.1-fc-0x203500a0b85ad1d7-lun-0 -> ../../sdb
+# virsh nodedev-list --tree
+computer
+|
+... ...
+| |
+| +- scsi_target5_0_2
+| | |
+| | +- scsi_5_0_2_0
+| | |
+| | +- block_sdb_3600a0b80005adb0b0000ab2d4cae9254-------->physical HBA
+| |
+| +- scsi_target5_0_3
+| |
+| +- scsi_5_0_3_0
+| |
+| +- block_sdc_3600a0b80005adb0b0000ab2d4cae9254-------->physical HBA
+...
+(2).Create a virtual HBA with NPIV.
+# ls /sys/class/fc_host/ <-----'class' is the type of adaptor, 'fc_host' is the host number.
+host4 host5
+# echo '2101001b32a90001:2100001b32a9da4e' > /sys/class/fc_host/host5/vport_create
+^wwpn ^wwnn
+○ Destroy the test virtual HBA with:
+# echo '2101001b32a90001:2100001b32a9da4e' > /sys/class/fc_host/host5/vport_delete
+*Note*: we can only use "2101001b32a9da4e" and "2100001b32a9da4e" as wwnn NUM; and can use "2101001b32a90001" "2101001b32a90002" "2101001b32a90003" "2101001b32a90004" as wwpn NUM, to create vHBAs, (wwpn NUM should not be duplicate with ohter vHBAs, or will get error: Name not unique on network), with other NUMs vHBA we can not use it actually because eng-ops only keep these NUMs connecting to physical storage for us.
+(3).Discover SAN Storage and check the port/node/fabric name.
+# ls /sys/class/fc_host/
+host4 host5 host6
+# cat /sys/class/fc_host/host6/port_name
+0x2101001b32a90001 <-----------wwpn
+# cat /sys/class/fc_host/host6/node_name
+0x2100001b32a9da4e <-----------wwnn
+# cat /sys/class/fc_host/host6/fabric_name
+0x2001000dec9877c1
+# virsh nodedev-list --tree
+computer
+|
+... ... ...
+| | |
+| | +- scsi_target6_0_2
+| | | |
+| | | +- scsi_6_0_2_0
+| | | |
+| | | +- block_sdd_3600a0b80005adb0b000056d64f3dbaa4-------->Virtual HBA
+| | |
+| | +- scsi_target6_0_3
+| | |
+| | +- scsi_6_0_3_0
+| | |
+| | +- block_sde_3600a0b80005adb0b000056d64f3dbaa4-------->Virtual HBA
+... ...
+| |
+| +- scsi_target5_0_2
+| | |
+| | +- scsi_5_0_2_0
+| | |
+| | +- block_sdb_3600a0b80005adb0b0000ab2d4cae9254-------->physical HBA
+| |
+| +- scsi_target5_0_3
+| |
+| +- scsi_5_0_3_0
+| |
+| +- block_sdc_3600a0b80005adb0b0000ab2d4cae9254-------->physical HBA
+...
+# ls -lh /dev/disk/by-path/pci-0000\:04\:00.1-fc-0x203*
+lrwxrwxrwx. 1 root root 9 May 21 00:47 /dev/disk/by-path/pci-0000:04:00.1-fc-0x203400a0b85ad1d7-lun-0 -> ../../sde
+lrwxrwxrwx. 1 root root 9 May 21 00:47 /dev/disk/by-path/pci-0000:04:00.1-fc-0x203500a0b85ad1d7-lun-0 -> ../../sdd
+○ e.g:...-drive file=/dev/disk/by-path/pci-0000:04:00.1-fc-0x203500a0b85ad1d7-lun-0,if=none,id=drive-data-disk,format=raw,cache=none,aio=native,werror=stop,rerror=stop,serial=QEMU-DISK2 -device virtio-scsi-pci,bus=pci.0,addr=0x7,id=scsi1 -device scsi-block,bus=scsi1.0,drive=drive-data-disk,id=data-disk

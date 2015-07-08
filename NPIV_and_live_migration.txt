@@ -1,0 +1,234 @@
+Steps:
+1.setup vHBA environment and share the same storage LUN between the two host with the wwnn/wwpn.
+host1: ibm-x3850x5-04.qe.lab.eng.nay.redhat.com
+# virsh vol-list --pool fc-pool
+Name                 Path                                   
+-----------------------------------------
+unit:0:2:0           /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+# ls -lh /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+lrwxrwxrwx. 1 root root 9 Jun 12 17:42 /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0 -> ../../sdc
+# qemu-img info /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+image: /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+file format: raw
+virtual size: 15G (16099835904 bytes)
+disk size: 0
+
+# virsh nodedev-list --tree
+computer
+  |
+ ...
+  +- pci_0000_00_09_0
+  |   |
+  |   +- pci_0000_18_00_0
+  |   |   |
+  |   |   +- scsi_host1
+  |   |    
+  |   +- pci_0000_18_00_1
+  |       |
+  |       +- scsi_host4
+  |           |
+  |           +- scsi_host6
+  |           |   |
+  |           |   +- scsi_target6_0_0
+  |           |   |   |
+  |           |   |   +- scsi_6_0_0_0
+  |           |   |    
+  |           |   +- scsi_target6_0_1
+  |           |   |   |
+  |           |   |   +- scsi_6_0_1_0
+  |           |   |    
+  |           |   +- scsi_target6_0_2
+  |           |       |
+  |           |       +- scsi_6_0_2_0
+  |           |           |
+  |           |           +- block_sdc_3600a0b80005b5dd40000d4d65398f3e4
+...
+# cat /sys/class/fc_host/host6/port_name
+0x5001a4a0f014c8ce
+# cat /sys/class/fc_host/host6/node_name
+0x5001a4ab286a1286
+# cat /sys/class/fc_host/host6/fabric_name
+0x2001000dec9877c1
+
+host2: ibm-x3850x5-05.qe.lab.eng.nay.redhat.com
+# virsh vol-list --pool fc-pool
+Name                 Path                                   
+-----------------------------------------
+unit:0:2:0           /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+# ls -lh /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+lrwxrwxrwx. 1 root root 9 Jun 12 05:39 /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0 -> ../../sdh
+# qemu-img info /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+image: /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+file format: raw
+virtual size: 15G (16099835904 bytes)
+disk size: 0
+# virsh nodedev-list --tree
+computer
+  |
+...
+  +- pci_0000_00_09_0
+  |   |
+  |   +- pci_0000_18_00_0
+  |   |   |
+  |   |   +- scsi_host1
+  |   |    
+  |   +- pci_0000_18_00_1
+  |       |
+  |       +- scsi_host4
+  |           |
+  |           +- scsi_host11
+  |           |   |
+  |           |   +- scsi_target11_0_0
+  |           |   |   |
+  |           |   |   +- scsi_11_0_0_0
+  |           |   |    
+  |           |   +- scsi_target11_0_1
+  |           |   |   |
+  |           |   |   +- scsi_11_0_1_0
+  |           |   |    
+  |           |   +- scsi_target11_0_2
+  |           |       |
+  |           |       +- scsi_11_0_2_0
+  |           |           |
+  |           |           +- block_sdh_3600a0b80005b5dd40000d4d65398f3e4
+...
+# cat /sys/class/fc_host/host11/port_name
+0x5001a4a463859ff8
+# cat /sys/class/fc_host/host11/node_name
+0x5001a4adb14df401
+# cat /sys/class/fc_host/host11/fabric_name
+0x2001000dec9877c1
+
+2.pass-through the vHBA LUN to KVM guest in the source side.
+# /usr/libexec/qemu-kvm -M pc -enable-kvm -m 2048 -smp 2,sockets=2,cores=1,threads=1 -no-kvm-pit-reinjection -usb -device usb-tablet,id=input0 -name sluo -uuid 990ea161-6b67-47b2-b803-19fb01d30d30 -rtc base=localtime,clock=host,driftfix=slew -device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev socket,id=channel1,path=/tmp/helloworld1,server,nowait -device virtserialport,chardev=channel1,name=com.redhat.rhevm.vdsm,bus=virtio-serial0.0,id=port1 -chardev socket,id=channel2,path=/tmp/helloworld2,server,nowait -device virtserialport,chardev=channel2,name=com.redhat.rhevm.vdsm,bus=virtio-serial0.0,id=port2 -drive file=/mnt/RHEL-Server-7.0-64-virtio.qcow2,if=none,id=drive-virtio-disk,format=qcow2,cache=none,aio=native,werror=stop,rerror=stop -device virtio-blk-pci,vectors=0,bus=pci.0,addr=0x4,scsi=off,drive=drive-virtio-disk,id=virtio-disk,bootindex=1 -net none -device virtio-balloon-pci,id=ballooning,bus=pci.0,addr=0x6 -global PIIX4_PM.disable_s3=0 -global PIIX4_PM.disable_s4=0 -drive file=/dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0,if=none,id=drive-data-disk1,format=raw,cache=none,aio=native -device virtio-scsi-pci,bus=pci.0,addr=0x7,id=scsi1 -device scsi-block,bus=scsi1.0,drive=drive-data-disk1,id=data-disk1 -k en-us -boot menu=on -qmp tcp:0:4444,server,nowait -serial unix:/tmp/ttyS0,server,nowait -vnc :1 -spice disable-ticketing,port=5931 -monitor stdio
+3.Launch a dest VM in listening mode with '<source cmd line>-incoming tcp:0:5888,server,nowait'.
+4.load some i/o to the pass-through LUN in the guest.
+# dd if=/dev/urandom of=/dev/sda bs=1M count=2000
+5.migration from source to destination.
+6.wait for migration to complete and check the guest dmesg.
+7.repeat to migration from destination to source.
+
+Resuts:
+after ping-pong migration with the I/O loading to the passthrough vHBA disk, guest work well and there is no any error occur.
+
+
+[root@ibm-x3850x5-04 timesu]# cat vport-assigned.xml 
+<name>scsi_host6</name>
+  <path>/sys/devices/pci0000:00/0000:00:09.0/0000:18:00.1/host4/vport-4:0-1/host6</path>
+  <parent>scsi_host4</parent>
+  <capability type='scsi_host'>
+    <host>6</host>
+    <capability type='fc_host'>
+      <wwnn>5001a4ab286a1286</wwnn>
+      <wwpn>5001a4a0f014c8ce</wwpn>
+      <fabric_wwn>2001000dec9877c1</fabric_wwn>
+    </capability>
+  </capability>
+</device>
+[root@ibm-x3850x5-04 timesu]# cat scsi_host4.xml 
+<device>
+  <name>scsi_host4</name>
+  <path>/sys/devices/pci0000:00/0000:00:09.0/0000:18:00.1/host4</path>
+  <parent>pci_0000_18_00_1</parent>
+  <capability type='scsi_host'>
+    <host>4</host>
+    <capability type='fc_host'>
+      <wwnn>20000024ff370479</wwnn>
+      <wwpn>21000024ff370479</wwpn>
+      <fabric_wwn>2001000dec9877c1</fabric_wwn>
+    </capability>
+    <capability type='vport_ops'>
+      <max_vports>254</max_vports>
+      <vports>0</vports>
+    </capability>
+  </capability>
+</device
+[root@ibm-x3850x5-04 timesu]# ks
+-bash: ks: command not found
+[root@ibm-x3850x5-04 timesu]# ls
+fc-pool.xml  scsi_host4.xml  vport-assigned.xml
+[root@ibm-x3850x5-04 timesu]# cat fc-pool.xml 
+   <pool type='scsi'>
+      <name>fc-pool</name>
+      <source>
+        <adapter type='fc_host' parent='scsi_host4' wwnn='5001a4ab286a1286' wwpn='5001a4a0f014c8ce'/>
+      </source>
+      <target>
+        <path>/dev/disk/by-path</path>
+        <permissions>
+          <mode>0700</mode>
+          <owner>0</owner>
+          <group>0</group>
+        </permissions>
+      </target>
+    </pool>
+
+*ibm-x3850x5-04.qe.lab.eng.nay.redhat.com
+# cat vport-assigned.xml 
+<name>scsi_host6</name>
+  <path>/sys/devices/pci0000:00/0000:00:09.0/0000:18:00.1/host4/vport-4:0-1/host6</path>
+  <parent>scsi_host4</parent>
+  <capability type='scsi_host'>
+    <host>6</host>
+    <capability type='fc_host'>
+      <wwnn>5001a4ab286a1286</wwnn>
+      <wwpn>5001a4a0f014c8ce</wwpn>
+      <fabric_wwn>2001000dec9877c1</fabric_wwn>
+    </capability>
+  </capability>
+</device>
+*ibm-x3850x5-05.qe.lab.eng.nay.redhat.com
+# cat vport-assigned.xml 
+<device>
+  <name>scsi_host13</name>
+  <path>/sys/devices/pci0000:00/0000:00:09.0/0000:18:00.1/host4/vport-4:0-5/host13</path>
+  <parent>scsi_host4</parent>
+  <capability type='scsi_host'>
+    <host>13</host>
+    <capability type='fc_host'>
+      <wwnn>5001a4adb14df401</wwnn>
+      <wwpn>5001a4a463859ff8</wwpn>
+      <fabric_wwn>2001000dec9877c1</fabric_wwn>
+    </capability>
+  </capability>
+</device>
+
+
+step:
+# cat /home/vhba.xml 
+<device>
+    <parent>scsi_host4</parent>
+    <capability type='scsi_host'>
+      <capability type='fc_host'>
+        <wwnn>5001a4ab286a1286</wwnn>
+        <wwpn>5001a4a0f014c8ce</wwpn>
+        <fabric_wwn>2001000dec9877c1</fabric_wwn>
+      </capability>
+    </capability>
+</device>
+# virsh nodedev-create /home/vhba.xml
+Node device scsi_host6 created from /home/vhba.xml
+# virsh nodedev-dumpxml scsi_host6
+<device>
+  <name>scsi_host6</name>
+  <path>/sys/devices/pci0000:00/0000:00:09.0/0000:18:00.1/host4/vport-4:0-1/host6</path>
+  <parent>scsi_host4</parent>
+  <capability type='scsi_host'>
+    <host>6</host>
+    <capability type='fc_host'>
+      <wwnn>5001a4ab286a1286</wwnn>
+      <wwpn>5001a4a0f014c8ce</wwpn>
+      <fabric_wwn>2001000dec9877c1</fabric_wwn>
+    </capability>
+  </capability>
+</device>
+# virsh pool-start fc-pool
+Pool fc-pool started
+# virsh vol-list --pool fc-pool
+Name                 Path                                    
+-----------------------------------------
+unit:0:2:0           /dev/disk/by-path/pci-0000:18:00.1-fc-0x203600a0b85b5dd4-lun-0
+
+[libvirt] Doc v2: How to use NPIV in libvirt
+http://www.redhat.com/archives/libvir-list/2013-September/msg01057.html
+

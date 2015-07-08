@@ -1,0 +1,9 @@
+==================================sound device==================================
+1.Boot kvm guest with spice console.
+------------------------------------
+for AC97:
+# /usr/libexec/qemu-kvm....-device AC97,id=sound0,bus=pci.0
+for ES1370:
+# /usr/libexec/qemu-kvm....-device ES1370,id=sound0,bus=pci.0
+for intel-hda:
+# /usr/libexec/qemu-kvm....-device intel-hda,id=sound0,bus=pci.0 -device hda-duplex

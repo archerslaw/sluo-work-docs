@@ -1,0 +1,83 @@
+==================================live mirroring/live block copy==================================
+Qemu-kvm provides block mirror from RHEL 6.3. Block mirror has the ability to copy more than one virtual disk from the source backing file/block device to a new target that is accessible by the host, and the copy is executed in a transparent way while the VM is running. Test focus on functional test including basic operation: start block mirror, query status, cancel, set speed limit and data integrity test; stress and performance test; a series of negative test to ensure false tolerance of the feature. 
+
+1.do live mirroring with NFS/iSCSI.
+-----------------------------------
+do live mirroring when destination is on NFS/iSCSI storage, quit QEMU while it is in steady state, contents of the disks should match (e.g. convert to raw and check SHA1).
+note: please use "mount -o rw,soft,timeo=600,retrans=6,nosharecache,vers=3" to mount the nfs server.
+ 1).connect QMP:
+ {"execute": "qmp_capabilities"}
+ 2).start mirroring:
+ { "execute": "__com.redhat_drive-mirror", "arguments": { "device": "drive-virtio-disk0", "target": "/root/sn1", "format": "qcow2", "mode": "absolute-paths", "full": false } }
+ 3).query block job, waiting for "offset" equals to "len"
+ { "execute": "query-block-jobs", "arguments": {} }
+ {"return": [{"device": "drive-virtio-disk0", "len": 10737418240, "offset": 10737418240, "speed": 0, "type": "mirror"}]}
+ 4).quit qemu, convert base image and target image to raw format, verify their chksum match.
+ 5).boot guest with target snapshot, guest boots correctly.
+
+2.cancel live mirroring, and query live mirroring job status via info block-jobs.
+---------------------------------------------------------------------------------
+{ "execute": "block-job-cancel", "arguments": { "device": "drive-virtio-disk0" } }
+{"return": {}}
+{"timestamp": {"seconds": 1333951164, "microseconds": 797571}, "event": "BLOCK_JOB_CANCELLED", "data": {"device": "drive-virtio-disk0", "len": 10737418240, "offset": 8279556096, "speed": 0, "type": "mirror"}}
+{ "execute" : "query-block-jobs", "arguments" : {} }
+{"return": []}
+
+3.set live mirroring speed limit.
+---------------------------------
+{ "execute": "block_job_set_speed", "arguments": { "device": "drive-virtio-disk0", "value": 1024 } }
+{ "execute": "query-block-jobs", "arguments": {} }
+
+4.reopen target snapshot, verify job complete event.
+----------------------------------------------------
+{"execute": "qmp_capabilities"}
+{ "execute" : "blockdev-snapshot-sync", "arguments" : { "device" : "ide0-hd0", "snapshot-file" : "/root/sn1", "format": "qcow2" } }
+{ "execute" : "blockdev-snapshot-sync", "arguments" : { "device" : "ide0-hd0", "snapshot-file" : "/root/sn2", "format": "qcow2" } }
+{ "execute" : "__com.redhat_drive-mirror", "arguments" : { "device" : "ide0-hd0", "target" : "/root/sn3", "format": "qcow2", "mode": "absolute-paths", "full" : false } }
+{ "execute" : "__com.redhat_drive-reopen", "arguments" : { "device" : "ide0-hd0", "new-image-file" : "/root/sn2", "format": "qcow2" } }
+
+5.mirroring QMP interface works correctly.
+------------------------------------------
+QMP with existing:
+{ "execute": "__com.redhat_drive-mirror", "arguments": { "device": "drive-virtio-disk0", "target": "/root/sn1", "format": "qcow2", "mode": "existing", "full" : false } }
+QMP with absolute-paths:
+{ "execute": "__com.redhat_drive-mirror", "arguments": { "device": "drive-virtio-disk0", "target": "/root/sn1", "format": "qcow2", "mode": "absolute-paths", "full" : false } }
+QMP with transaction:
+{ "execute" : "__com.redhat_drive-mirror", "arguments" : { "device" : "drive-virtio-disk0", "target" : "/root/sn1", "format": "qcow2", "mode": "absolute-paths", "full" : false } }
+
+6.block-job-set-speed.
+----------------------
+1).mirroring with speed set to 10M at beginning, after steady state, reopen to target.
+{ "execute" : "__com.redhat_drive-mirror", "arguments" : { "device" : "drive-virtio-disk0", "target" : "/dev/disk/by-path/ip-10.66.9.64:3260-iscsi-iqn.2001-04.com.example:storage.disk1.amiens.sys1.xyz-lun-2", "format": "qcow2", "mode": "absolute-paths", "speed": 10485760, "full" : false } }
+{"return": {}}
+{ "execute": "__com.redhat_drive-reopen", "arguments": {"device": "drive-virtio-disk0", "new-image-file": "/dev/disk/by-path/ip-10.66.9.64:3260-iscsi-iqn.2001-04.com.example:storage.disk1.amiens.sys1.xyz-lun-2", "format": "qcow2" } }
+{"timestamp": {"seconds": 1337189124, "microseconds": 258318}, "event": "BLOCK_JOB_COMPLETED", "data": {"device": "drive-virtio-disk0", "len": 21474836480, "offset": 21474836480, "speed": 109951162777600, "type": "mirror"}}
+{"return": {}}
+2).streaming with speed set to 10M.
+{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "drive-virtio-disk0", "snapshot-file": "/dev/disk/by-path/ip-10.66.9.64:3260-iscsi-iqn.2001-04.com.example:storage.disk1.amiens.sys1.xyz-lun-2", "mode": "absolute-paths", "format": "qcow2" } }
+{"return": {}}
+{ "execute": "block-stream", "arguments": { "device": "drive-virtio-disk0", "speed": 10485760 } }
+{"return": {}}
+{"timestamp": {"seconds": 1337265302, "microseconds": 451952}, "event": "BLOCK_JOB_COMPLETED", "data": {"device": "drive-virtio-disk0", "len": 21474836480, "offset": 21474836480, "speed": 1099511627776000, "type": "stream"}}
+
+Example:
+1.
+{ 'execute' : 'qmp_capabilities' }
+
+2. do block mirror
+{ "execute": "drive-mirror", "arguments": { "device": "drive-virtio-disk0", "target": "/root/mirror", "format": "qcow2", "mode": "absolute-paths", "sync": "full", "speed": 1000000000, "on-source-error": "stop", "on-target-error": "stop", "granularity": 65536, "buf-size": 65536} }
+
+3. query mirror job
+{ "execute" : "query-block-jobs", "arguments" : {} }
+{"return": [{"io-status": "ok", "device": "drive-virtio-disk0", "busy": true, "len": 21474836480, "offset": 16270491648, "paused": false, "speed": 1000000000, "type": "mirror"}]}
+
+4. after mirror reaching steady state, there will be a event "BLOCK_JOB_READY":
+
+{"timestamp": {"seconds": 1404801762, "microseconds": 528975}, "event": "BLOCK_JOB_READY", "data": {"device": "drive-virtio-disk0", "len": 21474836480, "offset": 21474836480, "speed": 10000000000, "type": "mirror"}}
+
+5. reopen to target image, note here, in RHEL7, drive-reopen is replaced with block-job-complete:
+
+{"execute": "block-job-complete", "arguments": { "device": "drive-virtio-disk0"} }
+{"return": {}}
+{"timestamp": {"seconds": 1404801916, "microseconds": 585994}, "event": "BLOCK_JOB_COMPLETED", "data": {"device": "drive-virtio-disk0", "len": 21474836480, "offset": 21474836480, "speed": 10000000000, "type": "mirror"}}
+

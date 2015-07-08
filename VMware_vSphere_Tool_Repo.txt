@@ -1,0 +1,58 @@
+Create a new virtual machine var vSphere Client:
+1.Configuration
+ typical - create a new virtual machine with the most common devices and configuration options.
+ custom - create a virtual machine with additional devices or specific configuration options.
+2.Name and Location
+3.Storage
+4.Virtual Machine Version
+ Virtual Machine Vesron 4: run on ESX 3.0 and later, and VMware Server 1.0 and later. 
+ Virtual Machine Vesron 7: run on Vmare ESX/ESXi 4.0 and later.
+ Virtual Machine Vesron 8: run on VMare ESXi 5.0 and later.
+5.Guest Operating System
+  windows/linux/other
+6.CPU
+  sockets/cores
+7.Memory
+8.Network
+  E1000/VMXNET 3
+9.SCSI Controller
+  BusLogic Parallel/LSI Logic Parallel/VMware Paravirtual
+10.Select/create a Disk
+
+Download VMware-Workstation-9.0.0-812388.x86_64.bundle.tar
+http://www.startos.com/soft/news/observed/2012082436100.html
+# tar -xvf VMware-Workstation-9.0.0-812388.x86_64.bundle.tar
+# chmod +x VMware-Workstation-9.0.0-812388.x86_64.bundle
+# ./VMware-Workstation-9.0.0-812388.x86_64.bundle
+This is your VMware Workstation 9 for Linux and Windows, 
+ESD serial number: 412CL-T5L9N-J870A-CKAKK-20W5H
+
+VMware Repo for VMware tools.
+http://packages.vmware.com/tools/index.html
+# rpm --import http://packages.vmware.com/tools/keys/VMWARE-PACKAGING-GPG-RSA-KEY.pub
+
+# cat /etc/yum.repos.d/VMWare-Tools.repo 
+[vmware-tools]
+name=vmware-tools
+baseurl=http://packages.vmware.com/tools/esx/latest/rhel6/x86_64/
+#baseurl=http://packages.vmware.com/tools/esx/latest/rhel6/i386/
+enabled=1
+gpgcheck=1
+gpgkey=http://packages.vmware.com/tools/keys/VMWARE-PACKAGING-GPG-RSA-KEY.pub
+
+# echo -e "[vmware-tools]\n\
+name=vmware-tools\n\
+baseurl=http://packages.vmware.com/tools/esx/latest/rhel6/x86_64\n\
+#baseurl=http://packages.vmware.com/tools/esx/latest/rhel6/i386\n\
+enabled=1\n\
+gpgcheck=1\n\
+gpgkey=http://packages.vmware.com/tools/keys/VMWARE-PACKAGING-GPG-RSA-KEY.pub\n" > /etc/yum.repos.d/VMWare-Tools.repo
+
+# yum install vmware-tools -y
+
+The VMware Virtual Disk Manager Command Line Tool:
+http://www.virtuatopia.com/index.php/Command_Line_Management_of_VMware_Virtual_Disks
+
+VMware-Workstation-9.0.0-812388.x86_64.bundle
+serial number: 412CL-T5L9N-J870A-CKAKK-20W5H
+

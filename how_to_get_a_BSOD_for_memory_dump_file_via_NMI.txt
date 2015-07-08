@@ -1,0 +1,32 @@
+1. Right-click My Computer, and then click Properties.
+
+2. Click the Advanced tab.
+
+3. Under Startup and Recovery, click Settings.
+
+4. Make sure that Kernel memory dump or Complete memory dump is selected under Writing Debugging Information.
+
+5. You can change the location of the memory dump file to a different local partition if you do not have sufficient room on the partition where the operating system is installed.
+
+6. In Registry Editor, locate the following registry subkey:
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CrashControl
+
+7. Right-click CrashControl, point to New, and then click DWORD Value.
+
+8. Type NMICrashDump, and then press ENTER.
+
+9. Right-click NMICrashDump, and then click Modify.
+
+10. In the Value data box, type 1, and then click OK.
+
+11. Restart the computer.
+
+12. send inject-nmi or nmi from host to guest
+
+NOTES:
+1. seabios and qemu version >= qemu-kvm-0.12.1.2-2.206.el6.x86_64 and seabios-0.6.1.2-8.el6.x86_64
+
+2. create a DWORD 32bit Value(not 64bit) for 64bit operation system in seventh steps
+
+3. send NMI from host to guest after login windows guest.(in order to enable registry)
+

@@ -1,0 +1,73 @@
+The 'nc' uses 1 kB packets and 'nc' has any command line option to set the packet size. We can either use something more sophisticated or lower MTU in the guest (ip link set mtu 500 dev eth0), then we should be able to use tcpdump to verify .
+
+Test Steps:
+1.boot a guest with the qemu-kvm-command.
+# /usr/libexec/qemu-kvm -m 2G -smp 2 -cpu qemu64,+sse2 -drive file=RHEL-Server-5.8-64-virtio.qcow2,format=qcow2,media=disk,if=virtio,cache=none,werror=stop,boot=on -net nic,model=virtio,macaddr=00:21:9B:FF:B9:FA,vlan=0 -net tap,sndbuf=1048576,vlan=0,script=/etc/qemu-ifup,downscript=no -uuid `uuidgen` -spice host=0,ic=on,port=5931,disable-ticketing -qxl 1 -boot c -usbdevice tablet -no-hpet -rtc-td-hack -no-kvm-pit-reinjection -monitor stdio
+2.lower eth0 MTU in the guest.
+# ip link set mtu 500 dev eth0
+3.turn the UFO on/off in the guest.
+# ethtool -K eth0 ufo on/off
+4.Start by using nc to listen on a specific port on anther host, with output captured into a file:
+Host: # nc -u -l 1234 > host_file
+5.Using guest connect to the listening nc process, feeding it the file which is to be transferred:
+Guest:# nc -u $host_ip_addr 1234 < guest_file
+6.capture packet size by tcpdump in the guest.
+# tcpdump -vvv -i eth0
+
+Test Results:
+1).turn the UFO on.
+# ethtool -K eth0 ufo on
+# ethtool -k eth0
+Offload parameters for eth0:
+rx-checksumming: off
+tx-checksumming: on
+scatter-gather: on
+tcp segmentation offload: on
+udp fragmentation offload: on
+generic segmentation offload: off
+generic-receive-offload: off
+# tcpdump -vvv -i eth0
+...
+05:33:59.569561 IP (tos 0x0, ttl  64, id 43827, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+05:33:59.569631 IP (tos 0x0, ttl  64, id 43828, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+05:33:59.569683 IP (tos 0x0, ttl  64, id 43829, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+05:33:59.569732 IP (tos 0x0, ttl  64, id 43830, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+05:33:59.569782 IP (tos 0x0, ttl  64, id 43831, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+05:33:59.569831 IP (tos 0x0, ttl  64, id 43832, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+05:33:59.569881 IP (tos 0x0, ttl  64, id 43833, offset 0, flags [none], proto: UDP (17), length: 1052) virtlab-66-84-62.englab.nay.redhat.com.60607 > 10.66.9.242.search-agent: UDP, length 1024
+...
+2).turn the UFO off.
+# ethtool -K eth0 ufo off
+# ethtool -k eth0
+Offload parameters for eth0:
+rx-checksumming: off
+tx-checksumming: on
+scatter-gather: on
+tcp segmentation offload: on
+udp fragmentation offload: off
+generic segmentation offload: off
+generic-receive-offload: off
+# tcpdump -vvv -i eth0
+...
+05:40:05.568283 IP (tos 0x0, ttl  64, id 58988, offset 480, flags [+], proto: UDP (17), length: 500) virtlab-66-84-62.englab.nay.redhat.com > 10.66.9.242: udp
+05:40:05.568284 IP (tos 0x0, ttl  64, id 58988, offset 960, flags [none], proto: UDP (17), length: 92) virtlab-66-84-62.englab.nay.redhat.com > 10.66.9.242: udp
+05:40:05.568289 IP (tos 0x0, ttl  64, id 58989, offset 0, flags [+], proto: UDP (17), length: 500) virtlab-66-84-62.englab.nay.redhat.com.36267 > 10.66.9.242.search-agent: UDP, length 1024
+05:40:05.568290 IP (tos 0x0, ttl  64, id 58989, offset 480, flags [+], proto: UDP (17), length: 500) virtlab-66-84-62.englab.nay.redhat.com > 10.66.9.242: udp
+05:40:05.568291 IP (tos 0x0, ttl  64, id 58989, offset 960, flags [none], proto: UDP (17), length: 92) virtlab-66-84-62.englab.nay.redhat.com > 10.66.9.242: udp
+05:40:05.568296 IP (tos 0x0, ttl  64, id 58990, offset 0, flags [+], proto: UDP (17), length: 500) virtlab-66-84-62.englab.nay.redhat.com.36267 > 10.66.9.242.search-agent: UDP, length 1024
+05:40:05.568297 IP (tos 0x0, ttl  64, id 58990, offset 480, flags [+], proto: UDP (17), length: 500) virtlab-66-84-62.englab.nay.redhat.com > 10.66.9.242: udp
+05:40:05.568298 IP (tos 0x0, ttl  64, id 58990, offset 960, flags [none], proto: UDP (17), length: 92) virtlab-66-84-62.englab.nay.redhat.com > 10.66.9.242: udp
+05:40:05.568303 IP (tos 0x0, ttl  64, id 58991, offset 0, flags [+], proto: UDP (17), length: 500) virtlab-66-84-62.englab.nay.redhat.com.36267 > 10.66.9.242.search-agent: UDP, length 1024
+...
+
+TCP包的输出信息:
+用tcpdump捕获的TCP包的一般输出信息是：
+src > dst: flags data-seqno ack window urgent options\
+src > dst:表明从源地址到目的地址， flags是TCP报文中的标志信息，S 是SYN标志， F (FIN)， P (PUSH) ， R (RST) “.” (没有标记); data-seqno是报文中的数据 的顺序号， ack是下次期望的顺序号， window是接收缓存的窗口大小， urgent表明 报文中是否有紧急指针。 Options是选项。
+
+UDP包的输出信息:
+用tcpdump捕获的UDP包的一般输出信息是：
+route.port1 > ICE.port2: udp lenth
+UDP十分简单，上面的输出行表明从主机route的port1端口发出的一个UDP报文 到主机ICE的port2端口，类型是UDP， 包的长度是lenth。
+
+

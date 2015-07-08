@@ -1,0 +1,240 @@
+==================================virtual nic device==================================
+1.hot-plug/unplug virtio-net network and enable vhost:
+------------------------------------------------------
+rhel6:
+(qemu)netdev_add tap,id=net-second-nic,vhost=on,script=/etc/qemu-ifup-switch
+(qemu)device_add virtio-net-pci,netdev=device-second-nic,id=nic2,mac=62:56:00:94:a3:16
+(qemu)netdev_del $net-second-nic
+(qemu)device_del $device-second-nic
+{"execute": "netdev_add","arguments":{"type":"tap","id":"virtio1","script":"/etc/qemu-ifup","vhost":"on"}}
+{"execute": "device_add", "arguments":{"driver":"virtio-net-pci","netdev":"virtio1","mac":"08:2e:5f:0a:0d:b2","id":"test1","addr":"0x9"}}
+{"execute":"netdev_del","arguments":{"id":"virtio1"}}
+{"execute": "device_del","arguments":{"id":"test1"}}  
+
+rhel4/5:
+for RHEL4/5, run "#modprobe acpiphp" in guest first.
+hot-add:
+(qemu) host_net_add tap sndbuf=0,vlan=0,script=/etc/qemu-ifup,downscript=no     // add a tap device for guest
+(qemu) pci_add pci_addr=auto nic vlan=0,model=virtio,macaddr=08:2E:5F:0A:0D:1A  // add a virtual NIC (type=virtio)
+delete:
+(qemu) host_net_remove $devices $tap  // remove virtual NIC
+(qemu) pci_del pci_addr=05  // remove tap device back-end
+
+2.check guest network link status of virtio nic with "status" paramter.
+-----------------------------------------------------------------------
+1).<qemu-kvm-command>-netdev tap,id=hostnet0,vhost=on,script=/etc/qemu-ifup -device virtio-net-pci,netdev=hostnet0,id=net0,mac=00:1a:4a:42:0b:00,bus=pci.0,addr=0x3,status=on...
+check link status inside guest by:
+# cat /sys/class/net/eth0/operstate
+up
+(qemu)set_link net0 off
+# cat /sys/class/net/eth0/operstate
+down
+2).<qemu-kvm-command>...status=off...
+the output of the /sys/class/net/eth0/operstate: unknown, no matter set_link on or off.
+
+2.ping the guest.
+-----------------
+determine the guest ip address: guest_ip
+determine the ping counts: ping_counts
+determine the flood counts: flood_counts
+packet_size = [ 0, 1, 48, 64, 512, 1440, 1500, 1505, 4096, 4192, 32767, 65507 ]
+interval = [ 0.1, 0.01, 0.001, 0.0001 ]
+1).ping the guest using following commands: ping guest_ip -c ping_counts -i {for each value in interval} -s { for each value in packet_size }  //the packet loss ratio should be zero 
+# for i in 0.1 0.01 0.001 0.0001; do for s in 0 1 48 64 512 1440 1500 1505 4096 4192 32767 65507; do ping 10.66.11.83 -c 10 -i $i -s $s; done; done
+2).ping the guest using folliwng commands: ping guest_ip -c ping_counts -s 65508  //the packet loss ratio should be 100%
+# ping 10.66.11.83 -c 10 -s 65508
+3).flood ping the guest using the floowing commands: ping -f -c flood_counts -s { for each value in packet_size}  //no panic/calltrace in the guest and guest
+# for s in 0 1 48 64 512 1440 1500 1505 4096 4192 32767 65507; do ping 10.66.11.83 -f -c 1000 -s $s; done
+
+3.PXE booting.
+--------------
+# alternatives --config qemu-pxe-roms
+
+There are 2 programs which provide 'qemu-pxe-roms'.
+
+  Selection    Command
+-----------------------------------------------
+*  1           /usr/share/etherboot
+ + 2           /usr/share/gpxe
+
+Enter to keep the current selection[+], or type selection number: 2
+1)start the virtual machie with interface name IFNAME.
+# <qemu-kvm> -net nic... -net tap,ifname=IFNAME...
+2)using tcpdump to snoop the tftp traffic.
+# tcpdump -l -n port 69 -i IFNAME > tcpdump
+3)wait for 2 minutes and search tftp packet in the tcpdump grep tftp tcpdump.
+4)if could find tftp in the tcpdump, testcase pass then fail.
+
+4.start change mac address.
+---------------------------
+# ifconfig eth0 down && ifconfig eth0 hw ether $new_mac  && ifconfig eth0 up
+restart `dhclient' to regain IP for new mac address
+# dhclient
+# service network restart
+
+5.determine the driver for the guest nics.
+------------------------------------------
+# ethtool -i eth0 | grep driver | awk '{print $2}'
+
+6.execute the following command to switch between promisc and non-promisc mode.
+-------------------------------------------------------------------------------
+# while true; do ifconfig eth0 promisc; sleep 0.01; ifconfig eth0 -promisc; sleep 0.01; done
+
+7.802.1q vlan.
+--------------
+config the vlan through( join the vlan 10 ):
+# vconfig add eth0 10; ifconfig eth0.10 192.168.123.11
+(# modprobe 8021q # ip link add link eth0 name eth0.1 type vlan id 1; ifconfig eth0.1 192.168.123.11)
+remove the vlan config:
+# vconfig rem eth0.10
+(# ip link delete eth0.1)
+
+8.queries the specified ethernet device for associated driver information.
+--------------------------------------------------------------------------
+# ethtool -i eth0
+
+9.set the max MTU for each nics.
+--------------------------------
+# ifconfig eth0 mtu 1500 ( for rtl8139 )
+# ifconfig eth1 mtu 65535 ( for virtio )
+# ifconfig eth2 mtu 16110 ( for e1000 )
+
+10.parallel flood ping each nics through the following commands.
+----------------------------------------------------------------
+ping -f eth0 -s {size from 0 to 1500}
+ping -f eth1 -s {size form 0 to 65507}
+ping -f eth2 -s {size from 0 to 16110}
+eg:
+RTL8139:
+--------
+# for s in 0 1 48 64 512 1440 1500; do ping -f -c 50 10.66.11.83 -s $s; done &
+e1000:
+------
+# for s in 0 1 48 64 512 1440 1500 1505 4096 4192 16110; do ping -f -c 50 10.66.11.66 -s $s; done &
+virtio:
+-------
+# for s in 0 1 48 64 512 1440 1500 1505 4096 4192 32767 65507; do ping -f -c 50 10.66.11.65 -s $s; done &
+
+11.queries the specified ethernet device for offload information.
+-----------------------------------------------------------------
+# ethtool -k eth0
+Offload parameters for eth0:
+rx-checksumming: on
+tx-checksumming: on
+scatter-gather: on
+tcp-segmentation-offload: on
+udp-fragmentation-offload: off
+generic-segmentation-offload: on
+generic-receive-offload: off
+large-receive-offload: off
+
+12.enable or disable the rx|tx|sg|tso|ufo|gso|gro|lro of the NIC.
+-----------------------------------------------------------------
+# ethtool -K eth0 rx|tx|sg|tso|ufo|gso|gro|lro on/off
+
+13.witch between promisc and non-promisc mode.
+----------------------------------------------
+# while true; do ifconfig eth0 promisc; sleep 0.01; ifconfig eth0 -promisc; sleep 0.01; done
+
+14.set the MTU for the eth0 network device.
+-------------------------------------------
+# ip link set mtu 1500 dev eth0 / # ifconfig eth0 mtu 1500
+
+15.transfer a big file via NC from guest to host by UDP.
+--------------------------------------------------------
+1).start by using nc to listen on a specific port on anther host, with output captured into a file:
+host:  # nc -u -l 1234 > host_file
+2).using guest connect to the listening nc process, feeding it the file which is to be transferred:
+guest: # nc -u $host_ip_addr 1234 < guest_file
+
+16.capture packet size by tcpdump.
+----------------------------------
+# tcpdump -vvv -i eth0
+
+17.if use spice to do migration in rhel5 ,use the following command.
+--------------------------------------------------------------------
+(qemu) migrate -d tcp:<dst-host>:<dst-port>,spiceport=<dst-spice-port>,spicehost=<dst-host>
+
+18.enables/disable zero copy.
+disable zero copy:
+# modprobe -r vhost-net
+# modprobe vhost-net
+# modprobe vhost-net experimental_zcopytx=0
+# cat /sys/module/vhost_net/parameters/experimental_zcopytx
+outputs 0
+enable zero copy:
+# modprobe -r vhost-net
+# modprobe vhost-net
+# modprobe vhost-net experimental_zcopytx=1
+# cat /sys/module/vhost_net/parameters/experimental_zcopytx
+outputs 1
+
+18.mac_change.
+# ifconfig eth0 hw ether $new_mac 
+# ifconfig | grep -i $new_mac
+# service network restart
+
+19.indirect_desc and event_idx"are enabled by default.
+# cat /sys/devices/pci0000\:00/0000\:00\:03.0/virtio0/features
+1100011111111111111100000000110000000000000000000000000000000000 <-----bit 28 and bit 29 are "1".
+turn off "indirect_desc" and "event_idx".
+#..... -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:54:00:8a:36:ae,bus=pci.0,addr=0x3,indirect_desc=off,event_idx=off
+# cat /sys/devices/pci0000\:00/0000\:00\:03.0/virtio0/features
+1100011111111111111100000000000000000000000000000000000000000000 <-----bit 28&29 are 0
+
+20.Check guest network link status of virtio nic with "status" paramter.
+"status=on" is default.
+# /usr/libexec/qemu-kvm -netdev tap,id=hostnet0,vhost=on,script=/etc/qemu-ifup -device virtio-net-pci,netdev=hostnet0,id=net0,mac=00:1a:4a:42:0b:00,bus=pci.0,addr=0x3,status=on
+# cat /sys/class/net/eth0/operstate
+up
+(qemu) set_link $drive_net off
+# cat /sys/class/net/eth0/operstate
+down
+NOTE: if boot again with "status=off", cat /sys/class/net/eth0/operstate output: unknown no matter set_link on or off.
+
+21.do netperf test.
+1).local host <--> guest 1
+# while true; do for b in 32 64 128 256 512 1024 2048 4096 8192 16834; do netperf -t UDP_STREAM -f m -H 10.66.11.229 -P 0 -l 10 -- -m $b; done; done
+2).guest 1 <--> guest 2
+# while true; do for b in 32 64 128 256 512 1024 2048 4096 8192 16834; do netperf -t UDP_STREAM -f m -H 10.66.11.151 -P 0 -l 10 -- -m $b; done; done
+3).external host <--> guest 2
+# while true; do for b in 32 64 128 256 512 1024 2048 4096 8192 16834; do netperf -t UDP_STREAM -f m -H 10.66.11.108 -P 0 -l 10 -- -m $b; done; done
+
+#!/bin/bash
+while true
+do 
+   netperf -H 10.66.105.226 -l 60
+   netperf -H 10.66.105.226 -l 60 -- -m 2048
+   netperf -t UDP_STREAM -H 10.66.105.226 -l 60
+   netperf -t UDP_STREAM -H 10.66.105.226 -- -m 1024
+   netperf -t TCP_RR -H 10.66.105.226
+   netperf -t TCP_RR -H 10.66.105.226 -- -r 32,1024
+   netperf -t TCP_CRR -H 10.66.105.226
+   netperf -t UDP_RR -H 10.66.105.226
+done
+
+22.multi queue nic.
+e.g:...-device virtio-net-pci,netdev=dev1,mac=9a:e8:e9:ea:eb:ec,id=net1,vectors=9,mq=on -netdev tap,id=dev1,vhost=on,script=/etc/qemu-ifup-switch,queues=4 -smp 4
+# ethtool -L eth0 combined 4
+# ethtool -l eth0
+# cat /proc/interrupts  | grep virtio
+ 22:          0          0          0          0   IO-APIC-fasteoi   virtio2
+ 23:          3          0          0          0   IO-APIC-fasteoi   virtio0
+ 41:          0          0          0          0   PCI-MSI-edge      virtio1-config
+ 42:        318          0          0          0   PCI-MSI-edge      virtio1-input.0 [irq vlaue is 42]
+ 43:          1          0          0          0   PCI-MSI-edge      virtio1-output.0
+ 44:          9          0          0          0   PCI-MSI-edge      virtio1-input.1 [irq vlaue is 44]
+ 45:          1          0          0          0   PCI-MSI-edge      virtio1-output.1
+ 46:          1          0          0          0   PCI-MSI-edge      virtio1-input.2 [irq vlaue is 46]
+ 47:          0          0          0          0   PCI-MSI-edge      virtio1-output.2
+ 48:          3          0          0          0   PCI-MSI-edge      virtio1-input.3 [irq vlaue is 48]
+ 49:          0          0          0          0   PCI-MSI-edge      virtio1-output.3
+# cat /proc/irq/42/affinity_hint 
+ 1  (1 means the queues 0 input affinity cpu is cpu0, 1= cpu0, 2=cpu1, 4=cpu2 8=cpu3)
+# cat /proc/irq/44/affinity_hint 
+ 2
+# cat /proc/irq/46/affinity_hint 
+ 4
+# cat /proc/irq/48/affinity_hint 
+ 8
+

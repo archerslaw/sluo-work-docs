@@ -1,0 +1,115 @@
+Kernel dumps may provide invalueable insights when debugging serious issues. This howto shows you step by step how to setup kdump on RHEL 5 to dump vmcores to a remote server.
+
+=== Step-by-Step Guide ===
+
+1.Download kernel-debuginfo-common and kernel-debuginfo RPMs for your kernel version (uname -r) from Red Hat FTP server.
+
+2.Install kernel-debuginfo-common and kernel-debuginfo on the system:
+
+# ls *.rpm
+kernel-debuginfo-2.6.18-128.1.10.el5.x86_64.rpm  kernel-debuginfo-common-2.6.18-128.1.10.el5.x86_64.rpm
+# rpm -ivh *.rpm
+warning: kernel-debuginfo-2.6.18-128.1.10.el5.x86_64.rpm: Header V3 DSA signature: NOKEY, key ID 37017186
+Preparing...                ########################################### [100%]
+ 1:kernel-debuginfo-common  ########################################### [ 50%]
+ 2:kernel-debuginfo         ########################################### [100%]
+
+3.Also install kexec-tools and crash:
+
+# yum install kexec-tools crash
+
+4.Append "crashkernel=128M@16M" to the kernel parameters in /boot/grub/grub.conf:
+
+# grubby --update-kernel=ALL --args="crashkernel=128M@16M"
+
+5.Reboot
+6.Check that the crash kernel has been loaded:
+
+# cat /proc/iomem | grep Crash\ kernel
+ 01000000-08ffffff : Crash kernel
+
+7.Configure kdump via the following command:
+
+# echo > /etc/kdump.conf << EOF
+net root@kdump_remote_server
+core_collector makedumpfile -d 31 -c
+EOF
+
+8.Propagate SSH keys so that the vmcore could be sent via scp without the need to enter any password:
+
+# service kdump propagate
+
+9.Create kdump ramdisk for collecting the vmcore
+
+# service kdump restart
+or /bin/systemctl restart kdump.service
+
+10.Sync all filesystems:
+
+# sync
+
+11.Provoke a kernel panic with:
+
+# echo "1" > /proc/sys/kernel/sysrq
+# echo "c" > /proc/sysrq-trigger
+
+12.Now the crash kernel should get booted and on the remote system a vmcore should get created under /var/crash:
+
+# tree /var/crash
+/var/crash
+|-- 192.168.12.227-2010-01-21-20:16:16
+ `-- vmcore.flat
+
+13.The vmcore.flat needs to be processed in order to analyze the core dump via the crash utility:
+
+# cat "vmcore.flat" | makedumpfile -R "/tmp/vmcore"
+The dumpfile is saved to /tmp/vmcore.
+makedumpfile Completed.
+
+14.Now you may analyze the vmcore with the crash utility:
+
+# crash /usr/lib/debug/lib/modules/`uname -r`/vmlinux /tmp/vmcore 
+
+crash 4.0-8.9.1.el5
+Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009  Red Hat, Inc.
+Copyright (C) 2004, 2005, 2006  IBM Corporation
+Copyright (C) 1999-2006  Hewlett-Packard Co
+Copyright (C) 2005, 2006  Fujitsu Limited
+Copyright (C) 2006, 2007  VA Linux Systems Japan K.K.
+Copyright (C) 2005  NEC Corporation
+Copyright (C) 1999, 2002, 2007  Silicon Graphics, Inc.
+Copyright (C) 1999, 2000, 2001, 2002  Mission Critical Linux, Inc.
+This program is free software, covered by the GNU General Public License,
+and you are welcome to change it and/or distribute copies of it under
+certain conditions.  Enter "help copying" to see the conditions.
+This program has absolutely no warranty.  Enter "help warranty" for details.
+ 
+GNU gdb 6.1
+Copyright 2004 Free Software Foundation, Inc.
+GDB is free software, covered by the GNU General Public License, and you are
+welcome to change it and/or distribute copies of it under certain conditions.
+Type "show copying" to see the conditions.
+There is absolutely no warranty for GDB.  Type "show warranty" for details.
+This GDB was configured as "x86_64-unknown-linux-gnu"...
+
+ KERNEL: /usr/lib/debug/lib/modules/2.6.18-128.1.10.el5/vmlinux
+ DUMPFILE: /tmp/vmcore  [PARTIAL DUMP]
+ CPUS: 1
+ DATE: Thu Jan 21 20:21:20 2010
+ UPTIME: 00:03:10
+ LOAD AVERAGE: 1.09, 0.46, 0.17
+ TASKS: 445
+ NODENAME: vrhel03
+ RELEASE: 2.6.18-128.1.10.el5
+ VERSION: #1 SMP Wed Apr 29 13:53:08 EDT 2009
+ MACHINE: x86_64  (2666 Mhz)
+ MEMORY: 1 GB
+ PANIC: "SysRq : Trigger a crashdump"
+ PID: 7835
+ COMMAND: "bash"
+ TASK: ffff81040699d0c0  [THREAD_INFO: ffff8103fed24000]
+ CPU: 1
+ STATE: TASK_RUNNING (SYSRQ)
+
+crash>
+

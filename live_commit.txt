@@ -1,0 +1,49 @@
+==================================live commit==================================
+1.live commit of data from overlay image nodes into backing nodes
+i.e. writes data between 'top' and 'base' into 'base'.
+base-->sn1-->sn2-->sn3-->sn4
+->{ "execute": "__com.redhat_block-commit", "arguments": { "device": "drive-virtio-disk0", "base": "/root/sn1", "top": "/root/sn3", "speed": 1000000000 } }
+<-{"return": {}}
+<-{"timestamp": {"seconds": 1333951164, "microseconds": 797571}, "event": "BLOCK_JOB_CANCELLED", "data": {"device": "drive-virtio-disk0", "len": 10737418240, "offset": 8279556096, "speed": 1000000000, "type": "commit"}}
+# @device:  the name of the device
+#
+# @base:   #optional The file name of the backing image to write data into,
+#                    If not specified, this is the deepest backing image.
+#
+# @top:              The file name of the backing image within the image chain,
+#                    which contains the topmost data to be committed down.
+#                    Note, the active layer as 'top' is currently unsupported.
+#
+#                    If top == base, that is an error.
+#
+# @speed:  #optional the maximum speed, in bytes per second.
+#
+# Returns: Nothing on success
+#          If commit or stream is already active on this device, DeviceInUse
+#          If @device does not exist, DeviceNotFound
+#          If image commit is not supported by this device, NotSupported
+#          If @base or @top is invalid, a generic error is returned
+#          If @top is the active layer, or omitted, a generic error is returned
+#          If @speed is invalid, InvalidParameter
+
+2.cancel live commit.
+->{ "execute": "block_job_cancel", "arguments": { "device": "drive-virtio-disk0" } }
+<-{"return": {}}
+
+3.query live commit job status.
+->{ "execute" : "query-block-jobs", "arguments" : {} }
+<-{"return": [{"device": "drive-virtio-disk0", "len": 10737418240, "offset": 10737418240, "speed": 1000000000, "type": "commit"}]}
+
+4.set live commit speed limit.
+->{ "execute": "block_job_set_speed", "arguments": { "device": "drive-virtio-disk0", "speed": 1024000 } }
+
+5.tell different commit.
+- offline commit (static): 
+# qemu-img commit -f qcow2 /dev/vg-90.100-sluo/sluo-snap1
+(qemu) ? commit
+commit device|all -- commit changes to the disk images (if -snapshot is used) or backing files
+- live commit (dynamic).
+  - via HMP: (qemu) ? __com.redhat_block-commit
+             __com.redhat_block-commit (null) -- (null)
+  - via QMP: { "execute": "__com.redhat_block-commit", "arguments": { "device": "drive-virtio-disk0", "base": "/root/sn1", "top": "/root/sn3", "speed": 1000000000 } }
+

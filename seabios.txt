@@ -1,0 +1,23 @@
+==================================seabios==================================
+1.check SMBIOS cpu&mem&machine info in the guest by:
+----------------------------------------------------
+# dmidecode -t 1     for machine info
+# dmidecode -t 4     for cpu info
+# dmidecode -t 17    for mem info
+2."-option-rom $optionrom"
+--------------------------
+Option ROMs /usr/share/*.bin (excluding bios.bin), are intended to be loaded by firmware (Seabios). 
+The "info roms" cmd under QEMU monitor gives info about roms currently being loaded. 
+Futher, output starting with "fw=" means rom being loaded by firmware; while "addr=" means being loaded by QEMU itself. 
+
+3.three modes of cdrom are supported by qemu-kvm:
+-------------------------------------------------
+1)emulated ide interface.
+2)emulated scsi interface.
+eg.boot from scsi-hd interface from emulated scsi cdrom via local iso file.
+...-drive file=${iso_path},if=none,id=drive-ide,format=raw,media=cdrom,readonly=on -device scsi-cd,drive=drive-ide,bootindex=0
+eg.boot from scsi-hd interface from emulated scsi cdrom via physical cdrom.
+...-drive file=/dev/cdrom,if=none,id=drive-ide,format=raw,media=cdrom,readonly=on -device scsi-cd,drive=drive-ide,bootindex=0
+3)pass through.
+eg.boot from scsi-block interface cdrom.
+...-drive file=/dev/cdrom,if=none,id=drive-ide,format=raw,media=cdrom,readonly=on -device scsi-block,drive=drive-ide,bootindex=0

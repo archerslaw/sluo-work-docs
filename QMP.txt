@@ -1,0 +1,38 @@
+==================================QMP==================================
+1.hot plug/unplug virtio_blk data disk.
++Arguments:
++- "id": Drive ID, must be unique (json-string)
++- "file": Disk image (json-string, optional)
++- "format": Disk format (json-string, optional)
++- "aio": How to perform asynchronous disk I/O (json-string, optional)
++- "cache": Host cache use policy (json-string, optional)
++- "cyls", "heads", "secs": Disk geometry (json-int, optional)
++- "trans": BIOS translation mode (json-string, optional)
++- "media": Media type (json-string, optional)
++- "readonly": Open image read-only (json-bool, optional)
++- "rerror": What to do on read error (json-string, optional)
++- "werror": What to do on write error (json-string, optional)
++- "serial": Drive serial number (json-string, optional)
++- "snapshot": Enable snapshot mode (json-bool, optional)
++
++Example:
++
++1. Add a drive without medium:
++
++-> { "execute": "__com.redhat_drive_add", "arguments": { "id": "foo" } }
++<- {"return": {}}
++
++2. Add a drive with 
++
++-> { "execute": "__com.redhat_drive_add",
++     "arguments": { "id": "bar", "file": "tmp.qcow2", "format": "qcow2" } }
++<- {"return": {}}
++
+{"execute":"__com.redhat_drive_add","arguments": {"file":"/home/my-data-disk.raw","format":"raw","id":"drive-data-disk","cache":"none","werror":"stop","rerror":"stop"}}
+{"return": {}}
+{"execute":"device_add","arguments":{"driver":"virtio-blk-pci","drive":"drive-data-disk","id":"data-disk","bus":"pci.0","scsi":"off","addr":"0x9"}}
+{"return": {}}
+
+
+
+

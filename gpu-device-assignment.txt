@@ -1,0 +1,38 @@
+==================================GPU Device Assignment==================================                                            
+1.add intel_iommu=on to kernel line of host, ensure host support  Nvidia GPU card
+
+2.create xorg.conf file inside guest and BusID to this configuration
+#Xorg -configure :1
+add BusID "PCI:6:0:0" to xorg.conf
+e.g
+/etc/X11/xorg.conf.d/xorg.conf
+Section "Device"
+     BusID       "PCI:6:0:0"
+EndSection
+
+3. load vfio-pci module on host
+#modprobe vfio-pci
+
+4. unbind Nvidia device(e.g pci address is 06:00.0)
+#echo 1 > /sys/module/vfio_iommu_type1/parameters/allow_unsafe_interrupts(if dmesg complains, otherwise no need)
+#echo "10de 0ff2" > /sys/bus/pci/drivers/vfio-pci/new_id
+#echo 0000:06:00.0 > /sys/bus/pci/devices/0000\:06\:00.0/driver/unbind
+#echo 0000:06:00.0 > /sys/bus/pci/drivers/vfio-pci/bind
+
+5. boot linux guest with cli
+#/usr/libexec/qemu-kvm -M pc -enable-kvm -m 2048 -smp 2,sockets=2,cores=1,threads=1  -device vfio-pci,host=06:00.0,id=GPU-k1,addr=06.0
+
+6. check GPU card from monitor
+(qemu) info pci
+Bus  0, device   6, function 0:
+    VGA controller: PCI device 10de:0ff2
+      IRQ 10.
+      BAR0: 32 bit memory at 0xfa000000 [0xfaffffff].
+      BAR1: 64 bit prefetchable memory at 0xd0000000 [0xd7ffffff].
+      BAR3: 64 bit prefetchable memory at 0xf2000000 [0xf3ffffff].
+      BAR6: 32 bit memory at 0xffffffffffffffff [0x0007fffe].
+      id "GPU-k1"
+...
+
+7. check GPU card inside guest
+# lspci

@@ -1,0 +1,73 @@
+==================================migration==================================
+1.use firewall stopping migration.
+during migration in progress ,exec '# iptables -A INPUT -p tcp --dport <migration port> -j REJECT' in dst host.
+
+ps: # iptables -A INPUT -p tcp --dport $port -j ACCEPT
+    # iptables -A INPUT -p tcp --dport $port -j REJECT
+    # iptables -I INPUT -s $ipaddr -j DROP
+
+2.firewall the iSCSI port instead of stopping/restarting the server itself.
+# iscsiadm --mode discovery --type sendtargets --portal 10.66.6.78 –discover
+# iscsiadm -m node -T test4 -p 10.66.6.78 -l
+Logging in to [iface: default, target: test4, portal: 10.66.6.78,3260] (multiple)
+Login to [iface: default, target: test4, portal: 10.66.6.78,3260] successful.
+# netstat -ant
+# iptables -A INPUT -p tcp -s $ip_addr --dport $port -j DROP
+# iptables -F / # service iptables stop
+
+3.s3/s4 is disable by defualt, need specify '-global PIIX4_PM.disable_s3=0 -global PIIX4_PM.disable_s4=0' in qemu-kvm commandline.
+
+4....-spice port=5931,disable-ticketing,seamless-migration=on -vga qxl -global qxl-vga.vram_size=67108864
+(qemu) __com.redhat_spice_migrate_info $dest_host_ip 5930
+main_channel_client_handle_migrate_connected: client 0x7fb44fa1bf80 connected: 1 seamless 1
+# remote-viewer spice://$host_ip:$port
+
+5.live migration via unix protocol.
+<qemu-kvm-command-line> -incoming unix:/tmp/sluo
+(qemu) migrate -d unix:/tmp/sluo
+
+6.sync system time from a ntp server.
+# ntpdate clock.redhat.com
+if modify the value of /etc/fstab from '1 1' to '0 0', it will skip the filesystem checking.
+# cat /etc/fstab 
+/dev/mapper/VolGroup-lv_root /                       ext4    defaults        1 1
+
+7.boot guest  has kvmclock.
+e.g.# /usr/libexec/qemu-kvm...-rtc base=localtime,clock=host,driftfix=slew
+
+8.live migration failed in ipv6 environment。
+1).configure the ipv6.
+# ip addr add 2002:5::11/64 dev eth0 (breth0/switch)
+# service ip6tables stop
+configure another 2002:5::12/64 in another host, and try to ping each other with "ping6" command.
+2).boot guest with '-vnc :1'.
+3).boot guest with listening mode on destination host:
+# /usr/libexec/qemu-kvm ......-vnc :1 -incoming tcp:[2002:5::2]:5800
+(qemu) migrate -d tcp:[2002:5::2]:5800
+# ...-spice port=5930,disable-ticketing,ipv6 -vga qxl -global qxl-vga.vram_size=33554432 -incoming tcp:[2002:5::2]:5800
+# spicec -h 2002:5::2 -p 5930
+
+9.it tell QEMU that we are using the macvtap network var __com_redhat_macvtap_compat parameter. 
+
+1).configure macvtap.
+# ip link add link eth0 dev macvtap1 type macvtap
+# ip link set macvtap1 address 08:2E:5F:0A:0D:B1 up
+# ip link show macvtap1
+# ip link show | grep macvtap
+6: macvtap1@eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UNKNOWN qlen 500
+2).So, we should always add this parameter when use macvtap network.
+#...-netdev tap,id=hostnet0,vhost=on,fd=3 3<>/dev/tap3 -device virtio-net-pci,__com_redhat_macvtap_compat=on,netdev=hostnet0,id=virtio-net-pci0,mac=08:2E:5F:0A:0D:B1,bus=pci.0,addr=0x5
+
+10.better to install virt-viewer package in host, and use the 'remote-viewer spice://$host_ip:$port' to connect guest desktop.
+# <qemu-kvm-command>...-spice port=5931,disable-ticketing,seamless-migration=on -vga qxl -global qxl-vga.vram_size=67108864
+# remote-viewer spice://$host_ip:$port
+(qemu) __com.redhat_spice_migrate_info $dest_ip $port
+main_channel_client_handle_migrate_connected: client 0x7ffff9ea1f70 connected: 1 seamless 1
+(qemu) migrate -d tcp:<ip>:<port>
+
+
+
+
+
+
+

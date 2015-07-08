@@ -1,0 +1,47 @@
+==================================timer device==================================
+1.Timer device test configuration.
++ Start host with “processor.max_cstate=1” in kernel boot option and chkconfig cpuspeed off.
++ Sync the host time with clock.redhat.com and load the host with following:
+  # for(( I=0; I<`cat /proc/cpuinfo  | grep processor | wc -l`;I++)); do echo $I; taskset -c $I /bin/bash -c 'for ((;;));  do X=1; done &'; done
++ Command line to start the guest:
+  linux:<qemu-kvm-command-line>...-no-hpet -rtc-td-hack -no-kvm-pit-reinjection
+  windows:<qemu-kvm-command-line>...-no-hpet -rtc-td-hack
++ Check guest kernel line:
+  In the KVM guest ensure that the kernel line and clocksource is correct (e.g. 'divider=10' for rhel5.9).
+2.+ Command line to query current time offset with ntp server:
+  # ntpdate -q $ntp_server(clock.redhat.com)
+  + Command line to sync current system clock with ntp server:
+  # ntpdate $ntp_server(clock.redhat.com)
+3.Query current time offset with syncing hardware clock to system time.
+the jump is triggered when the init script /etc/init.d/halt is executed on shutdown and does a "/sbin/hwclock --systohc -u".
+# date; /sbin/hwclock --utc; /sbin/hwclock --systohc -u; /sbin/hwclock --utc
+  Tue Aug 21 11:15:15 CST 2012
+  Tue 21 Aug 2012 11:15:16 AM CST  -0.369115 seconds
+  Tue 21 Aug 2012 11:15:18 AM CST  -0.500650 seconds
+4.input "nmi 0" in qemu-monitor to make BSOD in guest
+in RHEL5.x guest:
+# echo 1 >/proc/sys/kernel/unknown_nmi_panic 
+# echo 1 >/proc/sys/kernel/panic_on_unrecovered_nmi
+  then type "nmi 0" in qemu-monitor
+5.RTC (Real Time Clock) test** - hwclock
+1).boot the VM using "-rtc clock=vm".
+2).change the date using 'hwclock --set'.
+# hwclock --set --date "2/2/80 03:04:00" 
+3).Read the RTC date and check the date value
+# hwclock
+6.Enable the ntpd service.
+# service ntpd start
+7.Add the ntpd service to the default startup sequence.
+# chkconfig ntpd on
+8.check kvm_clock info:
+# cat /sys/devices/system/clocksource/clocksource0/current_clocksource 
+kvm-clock
+
+
+
+
+
+
+
+
+

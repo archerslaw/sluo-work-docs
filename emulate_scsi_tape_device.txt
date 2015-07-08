@@ -1,0 +1,64 @@
+1.install and setup the scsi target
+# rpm -q scsi-target-utils || yum -y install scsi-target-utils
+2.disable iptables and selinux.
+# service iptables stop
+# chkconfig iptables off
+# setenforce 0
+3.setup the tape target.
+# service tgtd start
+# tgtadm --lld iscsi --op new --mode target --tid 1 -T iqn.st:tape:sttarget1
+# tgtadm --lld iscsi --op bind --mode target --tid 1 -I ALL
+# dd if=/dev/zero of=/root/tape.device bs=1M count=100
+# tgtadm --lld iscsi --op new --mode logicalunit --tid 1 --device-type tape --lun 1 -b /root/tape.device
+# tgtadm --lld iscsi --op show --mode target
+Target 1: iqn.st:tape:sttarget1
+    System information:
+        Driver: iscsi
+        State: ready
+    I_T nexus information:
+    LUN information:
+        LUN: 0
+            Type: controller
+            SCSI ID: IET     00010000
+            SCSI SN: beaf10
+            Size: 0 MB, Block size: 1
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            Backing store type: null
+            Backing store path: None
+            Backing store flags: 
+        LUN: 1
+            Type: tape
+            SCSI ID: IET     00010001
+            SCSI SN: beaf11
+            Size: 1049 MB, Block size: 1
+            Online: Yes
+            Removable media: Yes
+            Prevent removal: No
+            Readonly: No
+            Backing store type: ssc
+            Backing store path: /root/tape.device
+            Backing store flags: 
+    Account information:
+    ACL information:
+        ALL
+4.install and setup the iscsi initiator
+# rpm -q iscsi-initiator-utils ||  yum -y install iscsi-initiator-utils
+# iscsiadm -m discovery -t st -p 127.0.0.1
+Starting iscsid:                                           [  OK  ]
+127.0.0.1:3260,1 iqn.st:tape:sttarget1
+# iscsiadm -m node -l
+Logging in to [iface: default, target: iqn.st:tape:sttarget1, portal: 127.0.0.1,3260] (multiple)
+Login to [iface: default, target: iqn.st:tape:sttarget1, portal: 127.0.0.1,3260] successful.
+# rpm -q lsscsi || yum install -y lsscsi
+# lsscsi | grep -w tape
+[5:0:0:1]    tape    IET      VIRTUAL-TAPE     0001  /dev/st0
+
+5.cleanup the testing environment
+# iscsiadm -m node -u
+# iscsiadm -m node -o delete
+# service tgtd stop
+# killall -9 tgtd
+

@@ -1,0 +1,136 @@
+==================================virtagent==================================
+start guest agent inside guest.
+---------------------------------
+1.get the tree on host:
+  # git clone git://repo.or.cz/qemu/mdroth.git qapi-backport-set3-v4
+  # cd qapi-backport-set3-v4/
+  #./configure --target-list=x86_64-softmmu
+  # make
+2.boot guest with virtio serial:
+ <qemu-kvm-command-lines>...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev socket,path=/tmp/qga.sock,server,nowait,id=qga0 -device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0
+ or boot guest with isa-serial (Only for rhel guest).
+ <qemu-kvm-command-lines>...-chardev socket,path=/tmp/qga.sock,server,nowait,id=qga0 -device isa-serial,chardev=qga0,id=qemu-ga0
+
+# qemu-ga -m virtio-serial -p /dev/virtio-ports/org.qemu.guest_agent.0 
+# nc -U /tmp/qga.sock readline
+
+$ qemu-ga.ext -m isa-serial -p COMx
+# nc -U /tmp/qga.sock
+
+3.install guest agent inside guest:
+(1)for rhel guest, install the qemu-guest-agent-*.rpm package.
+   need to install the qemu-guest-agent-0.12.1.2-2.***.el6.x86_64.rpm
+   and inside guest: 
+    # git clone git://repo.or.cz/qemu/mdroth.git qapi-backport-set3-v4
+    # cd qapi-backport-set3-v4/
+    #./configure --target-list=x86_64-softmmu
+    # make qemu-qa
+   start guest agent inside guest via:
+    # lsmode | grep virtio (check if virtio_console is loaded)
+    # qemu-ga -h
+    # lsmode | grep virtio (check if virtio_console is loaded)
+      - rhel6: # service qemu-ga start/restart/stop/status
+      - rhel7: # /bin/systemctl start/restart/stop/status qemu-guest-agent.service
+    # qemu-ga -m virtio-serial -p /dev/virtio-ports/org.qemu.guest_agent.0
+(2)for windows guest, install the executable file (qemu-ga.exe).
+    # qemu-ga.exe --service install
+   and start/stop agent manually inside guest via:
+    # net start qemu-ga
+    # net stop qemu-ga
+4.connect the chardev socket in host side for sending commands to guest.
+  # nc -U /tmp/qga.sock readline
+5.start/use QMP send commands to guest agent.
+ {"execute":"guest-sync", "arguments":{"id":1234}}
+ {"return": 1234}
+
+ {"execute":"guest-ping"}
+ {"return": {}}
+
+ {"execute": "guest-info"}
+ {"return": {"version": "1.0"}}
+
+ // shutdown/reboot/halt guest with "guest-shutdown" command
+ { "execute": "guest-shutdown", "arguments":{"mode":"powertdown"}}
+ { "execute": "guest-shutdown", "arguments":{"mode":"reboot"}}
+ { "execute": "guest-shutdown", "arguments":{"mode":"halt"}}
+  
+ // suspend guest to disk (S4) with command "guest-suspend-disk" 
+ {"execute": "guest-sync", "arguments":{"id":1234}}
+ { "execute": "guest-suspend-disk"}  // guest can resume successfully.
+ 
+ // suspend guest to disk but not power off with command "guest-suspend-hybrid"
+ {"execute": "guest-sync", "arguments":{"id":1234}}
+ { "execute": "guest-suspend-hybrid"}  // guest can resume successfully.
+
+ // suspend guest to memory/RAM (S3) with command "guest-suspend-ram"
+ {"execute": "guest-sync", "arguments":{"id":1234}}
+ { "execute": "guest-suspend-ram"}  // guest can resume successfully.
+ 
+ // write "hello world!\n" to /tmp/testqga
+ {"execute":"guest-file-open", "arguments":{"path":"/tmp/testqga","mode":"w+"}}
+ {"return": 0}
+ {"execute":"guest-file-write", "arguments":{"handle":0,"buf-b64":"aGVsbG8gd29ybGQhCg=="}}
+ {"return": {"count": 13, "eof": false}}
+ {"execute":"guest-file-close", "arguments":{"handle":0}}
+ {"return": {}}
+
+ // read back the "hello world!\n" from /tmp/testqga
+ {"execute":"guest-file-open", "arguments":{"path":"/tmp/testqga","mode":"r"}}
+ {"return": 1}
+ {"execute":"guest-file-read", "arguments":{"handle":1,"count":1024}}
+ {"return": {"buf-b64": "aGVsbG8gd29ybGQhCg==", "count": 13, "eof": true}}
+ {"execute":"guest-file-close","arguments":{"handle":1}}
+ {"return": {}}
+
+// Execute "guest-sync-delimited" command to guest agent.
+> { "execute": "guest-sync-delimited", "arguments": { "id": 123456 } }
+< �{"return": 123456}
+
+// guest-file-seek:
+Seek to a position in the file, as with fseek(), and return the current file position afterward. Also encapsulates ftell()'s functionality, just Set offset=0, whence=SEEK_CUR.
+handle: filehandle returned by guest-file-open
+offset: bytes to skip over in the file stream
+whence: SEEK_SET, SEEK_CUR, or SEEK_END, as with fseek()
+Returns: @GuestFileSeek on success.
+{ 'command': 'guest-file-seek', 'data':    { 'handle': 'int', 'offset': 'int', 'whence': 'int' }, 'returns': 'GuestFileSeek' }
+
+// guest-file-flush:
+Write file changes bufferred in userspace to disk/kernel buffers
+handle: filehandle returned by guest-file-open
+Returns: Nothing on success.
+{ 'command': 'guest-file-flush',  'data': { 'handle': 'int' } }
+
+ // freeze and unfreeze (freeze or thaw) guest filesystems
+ // check the guest status
+ {"execute":"guest-fsfreeze-status"} 
+ {"return": "thawed"}
+
+ // freeze guest filesystem and check the guest status
+ {"execute":"guest-fsfreeze-freeze"}
+ {"return": 3}
+ {"execute":"guest-fsfreeze-status"} //or try to create a file in guest, it should block. # echo foo > /tmp/foo (# touch /home/foo)
+ {"return": "frozen"}
+  
+ // thaw guest filesystem with command "guest-fsfreeze-thaw"
+ {"execute":"guest-fsfreeze-thaw"}
+ {"return": 3}
+ {"execute":"guest-fsfreeze-status"}
+ {"return": "thawed"}
+ 
+6.virtagent asynchronous commands.
+
+7.freeze guest + create live snapshot + thaw guest
+1).tell guest agent to freeze the filesystem (guest-fsfreeze-freeze)
+ {"execute":"guest-fsfreeze-status"}
+ {"execute":"guest-fsfreeze-freeze"}
+ {"execute":"guest-fsfreeze-status"}
+2).perform the live snapshot via the QEMU/QMP monitor.
+ {"execute":"blockdev-snapshot-sync","arguments":{"device":"drive-ide0-0-0","snapshot-file":"/home/sn-1","format":"qcow2"}}
+ (qemu) blockdev-snapshot-sync drive-ide0-0-0 /home/sn-1 qcow2
+3).tell the guest agent to that the filesystem (guest-fsfreeze-thaw)
+ {"execute":"guest-fsfreeze-thaw"}
+ {"execute":"guest-fsfreeze-status"}
+4).check the live snapshot
+ (qemu) info block
+ {"execute":"query-block"}
+

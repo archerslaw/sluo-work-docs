@@ -1,0 +1,44 @@
+==================================seabios==================================
+1.nested virt ept]boot two L2 guests(Windows and RHEL) and execute some memory and IO stress test inside guest.
+Setup:
+1.Boot guest L1 need use "-cpu host"
+2.install qemu-kvm inside L1 guest
+
+Actions:
+
+1. check default value
+Intel:
+#cat /sys/module/kvm_intel/parameters/nested
+#cat /sys/module/kvm_intel/parameters/ept
+AMD:
+# cat /sys/module/kvm_amd/parameters/nested
+# cat /sys/module/kvm_amd/parameters/npt
+2. enable nested
+2.1 Intel:
+# modprobe -r kvm_intel
+# modprobe kvm_intel nested=1
+2.2 #cat /sys/module/kvm_intel/parameters/nested
+2.3  AMD
+# modprobe -r kvm_amd
+# modprobe kvm_amd nested=1
+2.4 # cat /sys/module/kvm_amd/parameters/nested
+    # cat /sys/module/kvm_amd/parameters/npt
+2.5  Boot L1 RHEL7.1 guest  with -cpu host
+2.6. Boot RHEL7.1 guest and windows L2 guest on L1
+2.7. do memory and IO stress test inside two guests
+linux guest: use stress tools
+windows guest: use iozone and MEM stress tools
+
+Expected Results:
+step1.
+N
+Y
+0
+1
+step2.2
+1
+step2.5 and 2.6
+L1 and L2 guest boot successfully
+step2.7
+L2 and L1 guest works well, qemu-kvm process works well.
+

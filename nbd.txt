@@ -1,0 +1,24 @@
+==================================NBD==================================                                             
+QEMU supports NBD (Network Block Devices) both using TCP protocol as well as Unix Domain Sockets.
+Syntax for specifying a NBD device using TCP "nbd:<server-ip>:<port>[:exportname=<export>]"
+Example for TCP:
+qemu-system-i386 --drive file=nbd:192.0.2.1:30000
+Syntax for specifying a NBD device using Unix Domain Sockets "nbd:unix:<domain-socket>[:exportname=<export>]"
+Example for Unix Domain Sockets:
+qemu-system-i386 --drive file=nbd:unix:/tmp/nbd-socket
+
+(qemu) ? nbd_server_add 
+nbd_server_add nbd_server_add [-w] device -- export a block device via NBD
+(qemu) ? nbd_server_start 
+nbd_server_start nbd_server_start [-a] [-w] host:port -- serve block devices on the given host and port
+(qemu) ? nbd_server_stop 
+nbd_server_stop nbd_server_stop -- stop serving block devices using the NBD protocol
+
+
+{"name": "nbd-server-add"}
+{"name": "nbd-server-start"}
+{"name": "nbd-server-stop"}
+
+https://tcms.engineering.redhat.com/run/64789/#caserun_2636423
+
+https://bugzilla.redhat.com/show_bug.cgi?id=875871

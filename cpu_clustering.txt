@@ -1,0 +1,51 @@
+==================================cpu clustering==================================
+1.Disable cpu flag via "-cpu model_name,-flag":
+# /usr/libexec/qemu-kvm -M rhel6.3.0 -cpu Opteron_G3,-nx,-kvmclock ...
+
+2.Export cpu flag via "-cpu model_name,+flag":
+# /usr/libexec/qemu-kvm -M rhel6.3.0 -cpu Opteron_G3,+nx,+kvmclock ...
+
+3.List supported cpuid via "-cpu ?cpuid":
+# /usr/libexec/qemu-kvm -cpu ?cpuid
+
+4.List detail summary for CPU model via "-cpu ?dump"：
+# /usr/libexec/qemu-kvm -cpu ?dump
+
+5.List all CPU definitons via "-cpu ?model"：
+# /usr/libexec/qemu-kvm -cpu ?model
+
+6.Check the flags which host don't support via "-cpu model_name,check":
+# /usr/libexec/qemu-kvm -M rhel6.3.0 -cpu Opteron_G3,check ...
+
+7.remove the swap partition:
+# swapoff -a
+# vim /etc/fstab
+...
+/dev/mapper/vg_amd61725121-lv_root /                       ext4    defaults        1 1
+UUID=7740548a-ae95-4741-9c53-a05b244d6df6 /boot                   ext4    defaults        1 2
+/dev/mapper/vg_amd61725121-lv_home /home                   ext4    defaults        1 2
+#/dev/mapper/vg_amd61725121-lv_swap swap                    swap    defaults        0 0        <------------note here!
+...
+# lvremove -f /dev/vg_amd61725121/lv_swap
+# lvextend -L +127G /dev/mapper/vg_amd61725121-lv_home
+# umount /home
+# resize2fs -f /dev/mapper/vg_amd61725121-lv_home
+# mount /dev/mapper/vg_amd61725121-lv_home /home
+delete the "LVM_LV=vg_amd61725121/lv_swap" form /boot/grub/grub.conf
+
+8.install guest via NFS strong.
+# showmount -e storage.bos.redhat.com
+Export list for storage.bos.redhat.com:
+/vol/cobbler/ns2.bos.redhat.com ns2.bos.redhat.com,netapp-admin
+...
+/vol/engineering                10.16.255.2,10.16.36.51,10.16.101.57,10.16.36.78,10.16.101.63,10.16.48.0/22
+/vol/backups                    10.16.255.2,10.16.76.0/22,10.16.96.0/22,172.16.52.225,10.16.120.0/24
+# mount storage.bos.redhat.com:/vol/engineering /opt/
+# ls /opt/devarchive/redhat/rel-eng/RHEL6.3-20120509.1/6.3/Server/x86_64/os/isolinux/
+boot.msg   initrd.img    isolinux.cfg  splash.jpg    vmlinuz
+grub.conf  isolinux.bin  memtest       vesamenu.c32
+CLI:# /usr/libexec/qemu-kvm ... -monitor stdio -kernel /opt/devarchive/redhat/rel-eng/RHEL6.3-20120509.1/6.3/Server/x86_64/os/isolinux/vmlinuz -initrd /opt/devarchive/redhat/rel-eng/RHEL6.3-20120509.1/6.3/Server/x86_64/os/isolinux/initrd.img
+Installation Method: NFS directory
+NFS server name: storage.bos.redhat.com
+Red Hat Enterprise Linux directory: /vol/engineering/devarchive/redhat/rel-eng/RHEL6.3-20120509.1/6.3/Server/x86_64/os/
+

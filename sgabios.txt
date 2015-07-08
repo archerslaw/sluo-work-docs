@@ -1,0 +1,6 @@
+==================================sgabios==================================
+1.qemu-kvm is able to use sgabios to print BIOS messages to a virtual serial device.
+  # ...-device sga -serial stdio
+
+  -device sga -chardev socket,path=/tmp/sluo-test,server,nowait,id=isa1 -device isa-serial,chardev=isa1,id=isa-serial1
+  -monitor unix:/tmp/monitor1,server,nowait

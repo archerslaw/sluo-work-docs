@@ -1,0 +1,99 @@
+++ Compile qemu-kvm-rhel6/7 by brew:
+  # cd qemu-kvm-rhel6/redhat
+  # kinit (configure Red Hat Kerberos first, [0])
+  # echo "e1000fix" > ../localversion
+  # make rh-brew
+
+++ Compile kernel-rhel6/7 by brew:
+  # cd kernel/redhat
+  # kinit
+  # echo ".e1000fix" > ../localversion
+  # make rh-brew
+
++ Compile upstream kernel on RHEL
+  install: gcc, glibc-devel, kernel-devel, kernel-headers, etc
+  common steps: make menuconfig; make bzImage; make modules; make
+                modules_install; make install
+
+++ Compile upstream qemu on RHEL
+  steps: resolve package dependences, configure, compile
+
+  steps to resolve dependence issue:
+  - find the package name:
+    read configure error to know what's lack, you can read configure
+    sentences to know more detail, yum / rpm / etc can help to determine
+    the package name. 
+  - find related devel package
+    most of time, the devel packages' name have a '-devel' postfix
+  - install package and devel package
+    check if package exists in host by "rpm -qa |grep $package"
+    install packages from yum source (brew way, but not always available),
+    brewweb [1], brew packages catalog (same with brewweb, but quicker)[2],
+    compile from source(not recommend for RHEL testing), etc.
+
+Prepare: get qemu code from upstream repo
+  [root@ibm-x3650m4-05 ~]# git clone git://git.qemu.org/qemu.git
+  [root@ibm-x3650m4-05 ~]# cd qemu
+
+Example 0: get package name from error message with experience, gcc and devel package is installed by yum
+  [root@ibm-x3650m4-05 qemu]# ./configure 
+  ERROR: "cc" either does not exist or does not work
+  [root@ibm-x3650m4-05 qemu]# yum install gcc glibc-devel   
+
+Example 1: find the package name from yum source, install packages by yum
+  [root@ibm-x3650m4-05 qemu]# ./configure 
+  glib-2.12 required to compile QEMU
+  [root@ibm-x3650m4-05 qemu]# yum search glib|grep 2 |grep devel
+  glib2-devel.i686 : A library of handy utility functions
+  glib2-devel.x86_64 : A library of handy utility functions
+  [root@ibm-x3650m4-05 qemu]# yum install glib2-devel -y
+
+Example 2: search the dependence files in ./configure, and find package name by "yum provides .."
+  [root@ibm-x3650m4-05 qemu]# ./configure
+  Error: zlib check failed
+  Make sure to have the zlib libs and headers installed.
+  
+  [root@ibm-x3650m4-05 qemu]# less ./configure
+  ##########################################
+  # zlib check
+  if test "$zlib" != "no" ; then
+      cat > $TMPC << EOF
+  #include <zlib.h>
+  int main(void) { zlibVersion(); return 0; }
+  ...
+          echo "Error: zlib check failed"
+
+  [root@ibm-x3650m4-05 qemu]# yum provides */zlib.h
+  zlib-devel-1.2.7-9.el7.x86_64 : Header files and libraries for Zlib development
+  Filename    : /usr/include/zlib.h
+  
+  [root@ibm-x3650m4-05 qemu]# yum install zlib-devel -y
+
+Example 3: find packages from brew package catalog
+  (http://download.englab.nay.redhat.com/brewroot//packages/ + packagename + sub-version + ...)
+  [root@ibm-x3650m4-05 qemu]# ./configure 
+  ERROR: pixman not present. Your options:
+    (1) Preferred: Install the pixman devel package (any recent
+        distro should have packages as Xorg needs pixman too).
+    (2) Fetch the pixman submodule, using:
+        git submodule update --init pixman
+
+  [root@ibm-x3650m4-05 qemu]# rpm -qa |grep pixman
+    pixman-0.26.2-5.el7.x86_64
+     
+  [root@ibm-x3650m4-05 qemu]# wget http://download.englab.nay.redhat.com/brewroot//packages/pixman/0.26.2/5.el7/x86_64/pixman-devel-0.26.2-5.el7.x86_64.rpm
+  [root@ibm-x3650m4-05 qemu]# yum install pixman-devel-0.26.2-5.el7.x86_64.rpm -y
+
+Example 4: find packages from brewweb
+  [root@ibm-x3650m4-05 qemu]# ./configure --enable-spice
+  ERROR: User requested feature spice
+  ERROR: configure was not able to find it
+
+  search "spice-server" in brewweb [1], download and install the right spice-server-devel package
+
+Execute compile: (multiple threads)
+  [root@ibm-x3650m4-05 qemu]# make -j 8
+
+[0] https://home.corp.redhat.com/wiki/new-developer-quickstart-guide-red-hat
+[1] http://brewweb.devel.redhat.com/
+[2] http://download.englab.nay.redhat.com/brewroot//packages/

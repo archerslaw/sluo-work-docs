@@ -1,0 +1,45 @@
+// Install_iftop
+
+Product Name: IFTOP
+Homepage: http://www.ex-parrot.com/~pdw/iftop/
+Description: ftop does for network usage what top(1) does for CPU usage. It listens to network traffic on a named interface and displays a table of current bandwidth usage by pairs of hosts. Handy for answering the question “why is our ADSL link so slow?”.
+
+Pre-Installation Requirements:
+# yum install -y ncurses-devel
+
+Step 1: Installing libpcap
+# cd /usr/local/src
+# wget http://www.tcpdump.org/release/libpcap-1.2.1.tar.gz
+# tar -zxvf libpcap-1.2.1.tar.gz
+# cd libpcap-1.2.1
+# ./configure
+# make && make install
+
+Step 2: Installing IFTOP
+# cd /usr/local/src
+# wget http://www.ex-parrot.com/~pdw/iftop/download/iftop-0.17.tar.gz
+# tar -zxvf iftop-0.17.tar.gz
+# cd iftop-0.17
+# ./configure
+# make && make install
+
+Step 3: Making IFTOP root only
+# chmod 700 /usr/local/sbin/iftop
+
+Step 4: How to use IFTOP
+Start it:
+# iftop -i eth0
+
+iftop界面相关说明:
+界面上面显示的是类似刻度尺的刻度范围，为显示流量图形的长条作标尺用的。
+中间的<= =>这两个左右箭头，表示的是流量的方向。
+TX：发送流量
+RX：接收流量
+TOTAL：总流量
+Cumm：运行iftop到目前时间的总流量
+peak：流量峰值
+rates：分别表示过去 2s 10s 40s 的平均流量
+
+http://www.vpser.net/manage/iftop.html
+
+

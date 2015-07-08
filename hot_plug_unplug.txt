@@ -1,0 +1,111 @@
+==================hot-plug/unplug==================
+
+1.disk hot-plug/unplug:
+-----------------------
+Note: besides file device, we need support hot-plug/unlpug block device.
+for rhel6: (if you host is rhel6, please using device_del instead of pci_del)
+(qemu) __com.redhat_drive_add file=/home/my_data_disk.raw,id=data_drive,format=raw,aio=native,cache=none,werror=stop,rerror=stop
+(qemu) device_add virtio-blk-pci,drive=data_drive,id=blk_data
+(qemu) device_del $blk_data
+
+for rhel4/5:
+for RHEL4/5, run "#modprobe acpiphp" in guest first.
+(qemu) pci_add pci_addr=auto storage file=/home/my-data-disk.raw,if=virtio,media=disk,cache=none
+(qemu) info pci   <--- to get disk <bus>:<slot>
+(qemu) pci_del pci_addr=<domain>:<bus>:<slot>
+
+for rhel7:
+(qemu) drive_add pci_addr=auto file=/home/my-data-disk.qcow2,if=none,id=drive-data-disk,format=qcow2,werror=stop,rerror=stop
+OK
+(qemu) device_add virtio-scsi-pci,id=scsi0,vectors=0,bus=pci.0,addr=0x7
+(qemu) device_add scsi-hd,ver=sluo,drive=drive-data-disk,bus=scsi0.0,id=data-disk
+
+{"execute": "__com.redhat_drive_add", "arguments": {"id":"drive0", "file": "/home/my-data-disk.raw", "format": "raw" }}
+{"execute": "device_add", "arguments": {"bus": "pci.0", "driver": "virtio-blk-pci", "drive": "drive0", "id": "disk0"}}
+{"execute": "device_del", "arguments": {"id": "disk0" }}
+{"execute":"__com.redhat_drive_del","arguments":{"id":"drive0" }}
+
+{"execute": "device_add", "arguments": { "bus": "pci.0", "driver": "virtio-scsi-pci", "id": "scsi0" }}
+{"execute": "__com.redhat_drive_add", "arguments": { "id":"scsi-drive0", "file": "/home/my-data-disk.raw", "format": "raw" }}
+{"execute": "device_add", "arguments": { "driver": "scsi-hd", "drive": "scsi-drive0", "id": "scsi-disk0", "bus": "scsi0.0" }}
+{"execute":"device_del","arguments":{"id":"scsi0"}}
+{"execute":"device_del","arguments":{"id":"scsi-disk0"}}
+{"execute":"__com.redhat_drive_del","arguments":{"id":"scsi-disk0"}}
+
+{"execute": "netdev_add", "arguments": {"type": "tap","id": "hostnet0", "script": "/etc/qemu-ifup", "vhost":"on"}}
+{"execute": "device_add", "arguments": {"driver": "virtio-net-pci", "netdev": "hostnet0", "mac": "34:40:B5:9E:D3:90", "id": "virtio-net-pci0", "bus": "pci.0" }}
+{"execute": "device_del", "arguments": {"id": "virtio-net-pci0"}}
+{"execute": "netdev_del", "arguments": {"id": "hostnet0"}}
+
+2.hot-plug/unplug virtio-net network and enable vhost:
+------------------------------------------------------
+for rhel6:
+(qemu) netdev_add tap,id=net-second-nic,vhost=on,script=/etc/qemu-ifup-switch
+(qemu) device_add virtio-net-pci,netdev=device-second-nic,id=nic2,mac=62:56:00:94:a3:16
+(qemu) netdev_del $net-second-nic
+(qemu) device_del $device-second-nic
+{"execute": "device_del", "arguments": {"id": "virtio-net-pci0"}}
+{"execute": "netdev_del", "arguments": {"id": "hostnet0"}}
+{"execute": "netdev_add", "arguments": {"type": "tap","id": "hostnet0", "script": "/etc/qemu-ifup", "vhost":"on"}}
+{"execute": "device_add", "arguments": {"driver": "virtio-net-pci", "netdev": "hostnet0", "mac": "34:40:B5:9E:D3:90", "id": "virtio-net-pci0", "bus": "pci.0", "addr": "0x5"}}
+
+for rhel4/5:
+for RHEL4/5, run "#modprobe acpiphp" in guest first.
+hot-add:
+(qemu) host_net_add tap sndbuf=0,vlan=0,script=/etc/qemu-ifup,downscript=no     // add a tap device for guest
+(qemu) pci_add pci_addr=auto nic vlan=0,model=virtio,macaddr=08:2E:5F:0A:0D:1A  // add a virtual NIC (type=virtio)
+delete:
+(qemu) host_net_remove $devices $tap  // remove virtual NIC
+(qemu) pci_del pci_addr=05  // remove tap device back-end
+
+3.hot-plug/unplug virtserialport.
+---------------------------------
+only the rhel6 support:
+qemu cli :
+-chardev socket,id=channel0,path=/tmp/port0,server,nowait \
+-device virtio-serial-pci,id=virtio-serial0 \
+1).hot add a serial port0 by,
+(qemu) device_add virtserialport,bus=virtio-serial0.0,nr=1,chardev=channel0,name=org.linux-kvm.port.0,id=port0
+2).remove the port0 by,
+(qemu) device_del port0
+
+4.hot-plug/unplug virtio-serial-bus.
+------------------------------------
+for rhel5:
+qemu cli explanation:
+     -device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=4,bus=pci.0,addr=0x4
+             ^driver              ~~~~~~~~~~~~~~~~~~~~~~
+                                      device option
+     -chardev pty,id=channel0                                                                 
+     -device virtserialport,chardev=channel0,name=org.linux-kvm.port.0,bus=virtio-serial0.0
+             ^driver                                                    ^ride on bus
+1).hot add a serial bus by
+(qemu) device_add virtio-serial-pci,id=virtio-serial0
+2).hot add a port on the pci bus just added.
+(qemu) device_add virtserialport,bus=virtio-serial0.0,nr=1,chardev=channel0,name=org.linux-kvm.port.0,id=port0
+3).remove the port0 by,
+(qemu) device_del port0
+4).remove virtio-serial0 by,
+(qemu) device_del virtio-serial0
+
+5.hot-plug/unplug virtio-scsi-pci.
+----------------------------------
+(qemu) device_add virtio-scsi-pci,id=scsi1
+(qemu) __com.redhat_drive_add file=/home/my-data-disk.raw,cache=none,werror=stop,format=raw,id=cd-disk
+(qemu) device_add scsi-hd,drive=cd-disk,bus=scsi1.0
+{"execute":"__com.redhat_drive_del","arguments":{"id":"cd"}}
+{"timestamp": {"seconds": 1346641453, "microseconds": 39408}, "event": "DEVICE_TRAY_MOVED", "data": {"device": "cd", "tray-open": true}}
+{"return": {}}
+{"execute":"device_del","arguments":{"id":"scsi_cd"}}
+{"return": {}}
+{"execute":"device_del","arguments":{"id":"scsi1"}}
+{"return": {}}
+
+(qemu) __com.redhat_drive_del cd-disk
+(qemu) device_del scsi1.0
+(qemu) device_del scsi1
+
+
+
+
+

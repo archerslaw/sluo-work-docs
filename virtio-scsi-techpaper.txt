@@ -1,0 +1,179 @@
+===========================================virtio-scsi-techpaper===========================================
+
+
+Basic Knowledge
+1.Linux System has two device types:
+
+  Charater Device(no buf)    such as:keybord printer.....
+
+  Block Device (buf)         such as:disk CD-ROM RAM....
+
+2. The way of naming
+
+  1) PCI /dev/disk/by-path/pci####:##:##.#  <feild number>:<bus number>:<slot number>.<function number>
+
+  2) SCSI /dev/disk/by-path/pci-0000:00:1f.2-scsi-2:0:0:0 <host>:<channel>:<id>:<lun>
+
+3.SCSI system's Main Function
+  1) try to detect SCSI devices,establish the core structure of the available device drivers in memory.
+
+  2) Construct SCSI subsystem directory tree in the sysfs file system
+
+  3) SCSI high-level driver to bind a SCSI device,built the corresponding core structure in memory.
+
+  4) Provide the error recovery API is called when the SCSI command error and timeout
+
+4.Layered architecture
+ --------------------------------------------------------------------------------------------------------------------
+ |                                         Block I/O subsystem                                                      |
+ --------------------------------------------------------------------------------------------------------------------
+ --------------------------------------------------------------------------------------------------------------------
+ |               -------------  -------------  -------------   -------------                                        |
+ | high-layer    | sd-driver |  | st-driver |  | sr-driver |   | sg-driver |                                        |
+ |               -------------  -------------  -------------   -------------                                        |
+ |               ----------------------------------------------------------------                                   |
+ | middle-layer  | Public service layer(Error Recovery,Strategy of routine,etc) |                                   |
+ |               ----------------------------------------------------------------                                   |
+ |               ---------------------------------- --------------      ----------------------   ----------------   |
+ | low-layer     | SCSI Parallel Interface driver | | SAS driver |  ....|  FC channel driver |   | iSCSI driver |   |
+ |               ---------------------------------- --------------      ----------------------   ----------------   |
+ |                                                                                                                  |
+ --------------------------------------------------------------------------------------------------------------------
+ --------------------------------------------------------------------------------------------------------------------
+ |                                         Harddisk/firmware                                                        |
+ --------------------------------------------------------------------------------------------------------------------
+
+about virtual block device pls refer to Virtual Block Device Technical Paper writed by michen,link as follow:
+
+https://mirrorglass.englab.nay.redhat.com/XWiki/bin/download/Main/Technical%20paper%20list/VirtualBlockDeviceTechnicalPaper.txt
+
+
+1. Introduction
+
+The virtio SCSI host is the basis of an alternative storage stack for
+KVM. This stack would overcome several limitations of the current
+solution, virtio-blk:
+
+1) scalability limitations: virtio-blk-over-PCI puts a strong upper
+limit on the number of devices that can be added to a guest. Common
+configurations have a limit of ~30 devices. While this can be worked
+around by implementing a PCI-to-PCI bridge, or by using multifunction
+virtio-blk devices, these solutions either have not been implemented
+yet, or introduce management restrictions. On the other hand, the SCSI
+architecture is well known for its scalability and virtio-scsi supports
+advanced feature such as multiqueueing.
+
+2) limited flexibility: virtio-blk does not support all possible storage
+scenarios. For example, it does not allow SCSI passthrough or persistent
+reservations. In principle, virtio-scsi provides anything that the
+underlying SCSI target (be it physical storage, iSCSI or the in-kernel
+target) supports.
+
+3) limited extensibility: over the time, many features have been added
+to virtio-blk. Each such change requires modifications to the virtio
+specification, to the guest drivers, and to the device model in the
+host. The virtio-scsi spec has been written to follow SAM conventions,
+and exposing new features to the guest will only require changes to the
+host's SCSI target implementation.
+
+2.Virtio-scsi in qemu
+Now ,virtio-scsi is developing.We can do some test on trial version.
+
+# /usr/libexec/qemu-kvm -device ?
+
+name "virtio-scsi-pci", bus PCI, alias "virtio-scsi"
+name "scsi-disk", bus SCSI, desc "virtual SCSI disk or CD-ROM (legacy)"
+name "scsi-block", bus SCSI, desc "SCSI block device passthrough"
+name "scsi-cd", bus SCSI, desc "virtual SCSI CD-ROM"
+name "scsi-hd", bus SCSI, desc "virtual SCSI disk"
+name "scsi-generic", bus SCSI, desc "pass through generic scsi device (/dev/sg*)"
+
+3.How to use virtio-scsi
+
+  0)special in virtio-scsi
+
+    -drive -device -device 
+
+  1)install from virtio-scsi CD-ROM/PXE
+ 
+    Does not support installation now,because not suitable driver for guest system.
+
+  2)boot with virtio-scsi device 
+ 
+   prepare a preinstalled linux guest updating it's kernel to,then boot it with virtio-scsi disk/CD-ROM
+
+    I.boot with scsi-disk
+
+      -drive file=/home/RHEL6.2-64.qcow2,if=none,format=qcow2,rerror=stop,werror=stop,id=scsi0 -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=scsi0,bootindex=0
+
+    II.boot with scsi-cd
+
+       -drive file=/home/RHEL6.2-20111117.0-Server-x86_64-DVD1.iso,if=none,id=cd -device scsi-cd,drive=cd
+
+  3)read/write from virtio-scsi CD-ROM
+
+    such as linux guest update.
+
+    I have been tested copy files from a passthrugh CD-ROM.no error.But we can't eject cdrom from guest.
+
+  4)passthrough device from host
+
+    iscsi device /local file image /CD-ROM
+   I. boot with passthru CD-ROM
+
+      -drive file=/dev/sr0,if=none,id=cd -device virtio-scsi-pci,id=cd -device scsi-block,drive=cd
+   II.boot with passthru iscsi device 
+
+      -drive file=/dev/disk/by-path/ip-10.66.11.239\:3260-iscsi-xfu-lun-1,if=none,id=iscsi -device scsi-block,drive=iscsi
+   III.boot guest with passthru local disk
+
+       -drive file=/dev/sdb,if=none,id=iscsi -device virtio-scsi-pci,id=iscsi -device scsi-block,drive=iscsi
+ 
+   After passthru a scsi device to guest ,we can check in guest system:
+   # ls /dev/disk/by-path/
+   # fdisk -l
+
+  5)hotplug/hotunplug virtio-scsi device
+   
+  -hotplug:
+   __com.redhat_drive_add file=/home/disk1.qcow2,id=disk1
+   device_add virtio-scsi-pci,id=disk1
+   device_add scsi-disk,drive=disk1
+  -hotunplug:
+   device_del disk1
+
+   hotplug again will caused core dump.
+   (qemu) __com.redhat_drive_add file=/home/disk3.qcow2,id=disk3
+   (qemu) device_add virtio-scsi-pci,id=disk3
+   qemu-kvm: savevm.c:1190: register_savevm_live: Assertion `!se->compat || se->instance_id == 0' failed.
+  
+   scsi-cd also support hotplug/hotunplug.
+   ***rescan scsi bus in guest***
+   # cat /sys/class/scsi_host/hostX/proc_name
+   # echo "- - -" > /sys/class/scsi_host/hostX/scan
+
+  6) add device on specified bus or multi bus
+
+    I.boot guest with specified scsi-id number and lun number
+   
+      -drive file=/home/RHEL6.2-64.raw,if=none,format=raw,rerror=stop,werror=stop,cache=none,id=scsi0 -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=scsi0,scsi-id=0,lun=0,bootindex=0 
+
+    II.boot guest with multi virtio disks in the same scsi bus
+   
+    /usr/libexec/qemu-kvm -m 4G -smp 4 -M rhel6.2.0 -name RHEL6.2-Server-64 -no-kvm-pit-reinjection  -rtc-td-hack -drive file=/home/RHEL6.2-64.raw,if=none,format=raw,rerror=stop,werror=stop,cache=none,id=scsi0 -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=scsi0,scsi-id=0,lun=0,bootindex=0 -netdev tap,id=hostnet0,vhost=on,script=/etc/qemu-ifup-switch -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:56:00:94:a3:20 -uuid 9e6f04cf-2ad7-45aa-9333-2d2ee26570c6 -balloon none -vnc :1 --enable-kvm -drive file=/dev/sdb,if=none,id=iscsi -device virtio-scsi-pci,id=iscsi -device scsi-block,drive=iscsi -usb -usbdevice tablet -monitor stdio -drive file=/home/RHEL6.2-20111117.0-Server-x86_64-DVD1.iso,if=none,id=cd -device scsi-cd,drive=cd,scsi-id=0,lun=1
+
+    III.boot guest with multi virtio disks in different scsi bus
+
+   /usr/libexec/qemu-kvm -m 4G -smp 4 -M rhel6.2.0 -name RHEL6.2-Server-64 -no-kvm-pit-reinjection  -rtc-td-hack -drive file=/home/RHEL6.2-64.raw,if=none,format=raw,rerror=stop,werror=stop,cache=none,id=scsi0 -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=scsi0,scsi-id=0,lun=0,bootindex=0 -netdev tap,id=hostnet0,vhost=on,script=/etc/qemu-ifup-switch -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:56:00:94:a3:20 -uuid 9e6f04cf-2ad7-45aa-9333-2d2ee26570c6 -balloon none -vnc :1 --enable-kvm -drive file=/dev/sdb,if=none,id=iscsi -device virtio-scsi-pci,id=iscsi -device scsi-block,drive=iscsi -usb -usbdevice tablet -monitor stdio -drive file=/home/RHEL6.2-20111117.0-Server-x86_64-DVD1.iso,if=none,id=cd -device scsi-cd,drive=cd,scsi-id=1,lun=0
+
+  7) about scsi-generic
+
+     This option support passthru scsi generic device from host to guest.Because /dev/sg* is charater device on host,so i need to do more 
+     investigation. 
+
+     Paolo had added a patch to bz788942 on 2012/02/09.
+
+4.reference
+
+https://fedoraproject.org/wiki/Features/virtio-scsi
+http://www.tldp.org/HOWTO/SCSI-2.4-HOWTO/

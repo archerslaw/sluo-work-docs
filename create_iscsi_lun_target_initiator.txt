@@ -1,0 +1,120 @@
+====Setting up iSCSI (target/server and initiator/client) on RHEL====
+
+It's quite easy to setup an iSCSI environment on Red Hat Enterprise Linux. Try this easy setup to get a better understanding of iSCSI.
+
+Ingredients:
+
+    Two (virtual) machines, a server 172.16.0.1 and a client 172.16.0.2.
+    Access to the "RHEL Cluster-Storage" channel on Red Hat Network.
+
+N.B. SELinux must be disabled when using this recipe, iptables tcp port 3260 must be opened on the server.
+
+On the server execute these commands to setup a 100 Mb iSCSI target. This target can later be mounted on the client(s).
+# yum install scsi-target-utils perl-Config-General target
+# cat /etc/tgt/targets.conf
+<target iqn.2010-04.nl.meinit:node1.target1>
+backing-store /iscsi1.img
+initiator-address 172.16.0.2
+</target>
+# dd if=/dev/zero of=/iscsi1.img bs=1024 count=102400
+# chkconfig tgtd on
+# service tgtd start
+
+Now on (all) client(s) follow these steps. (Please pay attention that only one client was give access in the configuration example above; 172.16.0.2.)
+# yum install scsi-target-utils perl-Config-General
+
+Start iscsi daemon.
+# service iscsi start
+
+To see what IQNs are available, run:
+# iscsiadm -m discovery -t sendtargets -p 172.16.0.1
+
+The result is a list of IQN(s) available. This discovery is a mandatory step of connecting to the iSCSI target.
+
+Login to the iSCSI target:
+# iscsiadm -m node -T iqn.2010-04.nl.meinit:node1.target1 -p 172.16.0.1 -l
+
+If that all works, you have new SCSI devices available, check dmesg and start iscsi at boot time:
+# chkconfig iscsi on
+
+In this example the iSCSI target does not have a filesystem. Create it on the client and mount it at boot time:
+# fdisk /dev/sda
+# mkfs.ext3 /dev/sda1
+# echo "/dev/sda1 /mnt ext3 defaults,_netdev 0 0" >> /etc/fstab
+
+You are done, but these commands are quite useful when connecting to an unknown iSCSI device.
+
+To see more about the IQN:
+# iscsiadm -m node -T iqn.2010-04.nl.meinit:node1.target1 -p 172.16.0.1
+
+##############################
+1. Prepare the iscsi target server:
+1) On the iscsi target server, vreate file-based images and created the target by adding an XML entry to the configuration file:
+
+# dd if=/dev/zero of=/iscsi.img bs=1M count=2000
+
+# vim /etc/tgt/targets.conf
+<target iqn.2008-09.com.example:server.target2>
+    backing-store /iscsi.img
+    incominguser redhat redhat
+</target>
+
+# service tgtd restart
+# tgt-admin --show
+Target 1: iqn.2008-09.com.example:server.target2
+    System information:
+        Driver: iscsi
+        State: ready
+...
+    LUN information:
+        LUN: 0
+            Type: controller
+            SCSI ID: IET     00010000
+            SCSI SN: beaf10
+            Size: 0 MB, Block size: 1
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            Backing store type: null
+            Backing store path: None
+            Backing store flags: 
+        LUN: 1
+            Type: disk
+            SCSI ID: IET     00010001
+            SCSI SN: beaf11
+            Size: 2097 MB, Block size: 512
+            Online: Yes
+            Removable media: No
+            Prevent removal: No
+            Readonly: No
+            Backing store type: rdwr
+            Backing store path: /iscsi.img
+            Backing store flags: 
+    Account information:
+        redhat
+    ACL information:
+        ALL
+
+2. Prepare the iscsi initator:
+
+# vim /etc/iscsi/iscsid.conf
+node.session.auth.authmethod = CHAP
+node.session.auth.username = redhat
+node.session.auth.password = redhat
+
+# service iscsid restart
+
+3. Discover targets and logging in to the iSCSI target successfully in the KVM host.
+# iscsiadm --mode discovery --type sendtargets --portal 10.66.9.107 –discover
+10.66.9.107:3260,1 iqn.2008-09.com.example:server.target2
+
+# iscsiadm -m node -T iqn.2008-09.com.example:server.target2 -p 10.66.9.107 -l
+Logging in to [iface: default, target: iqn.2008-09.com.example:server.target2, portal: 10.66.9.107,3260] (multiple)
+Login to [iface: default, target: iqn.2008-09.com.example:server.target2, portal: 10.66.9.107,3260] successful.
+
+# iscsiadm -m node -T iqn.2008-09.com.example:server.target2 -p 10.66.9.107 --logout
+Logging out of session [sid: 5, target: iqn.2008-09.com.example:server.target2, portal: 10.66.9.107,3260]
+Logout of [sid: 5, target: iqn.2008-09.com.example:server.target2, portal: 10.66.9.107,3260] successful.
+
+e.g:# /usr/libexec/qemu-kvm -M pc -cpu SandyBridge -enable-kvm -m 2048 -smp 2,sockets=2,cores=1,threads=1 -no-kvm-pit-reinjection ... -drive file=iscsi://10.66.9.107:3260/iqn.2008-09.com.example:server.target2/0,if=none,id=drive-disk,cache=none,format=raw -iscsi user=redhat,password=redhat,id=iqn -device virtio-scsi-pci,id=scsi1,bus=pci.0,addr=0x7 -device scsi-hd,drive=drive-disk,bus=scsi1.0,id=iscsi-disk

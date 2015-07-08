@@ -1,0 +1,181 @@
+1. Summary
+Virtagent is a host/guest RPC communication agent which will extend
+the functionality/usability/contorl offered by qemu. We need this to
+maintain backward-compatibility with older guests which do not have
+virtio-serial. With this in place we can deploy a host/guest communication
+agent to provide a basic set of services in a broader range of guests.
+Currently,the guest agent is exposed to the host via a separate QEMU
+chardev device (generally, a unix socket) that communicates with the
+agent using the QMP wire protocol (minus the negotiation) over a
+virtio-serial or isa-serial channel to the guest. 
+
+2. Three related parts for the guest agent
+1) Guest agent (running on guest), listening for commands from the
+virtio-serial port (i.e. commands from the host).
+
+2) chardev.  A unix socket to virtio serial port or isa serial.
+This isn't specific to the guest agent at all, it is simply a 
+serial connection to the host.
+
+3) Whatever management layer (e.g., libvirt) that is talking to the
+guest agent then sends the JSON commands over the serial
+connection to the listening guest agent, and listens for responses.
+
+3.How to use
+
+install virtgent package inside guest.(maybe a rpm package for rhel guest
+and a exe file for windows guest.)
+Connect the chardev on host side.
+Send commands to guest agent from the chardev on host side.
+
+*RHEL guest agent:
+
+Currently the patches have not been included to official build, so need to
+build yourself or use the scratch build.
+
+(1) Get the tree on host:
+# git clone git://repo.or.cz/qemu/mdroth.git qapi-backport-set3-v4
+(2) # cd qapi-backport-set3-v4/
+(3) #./configure --target-list=x86_64-softmmu
+     # make
+(4) Boot a rhel6.2 guest
+ x86_64-softmmu/qemu-system-x86_64 ....... 
+-chardev socket,path=/tmp/qga.sock,server,nowait,id=qga0 -device 
+virtio-serial -device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0
+(5) Inside guest:
+#git clone git://repo.or.cz/qemu/mdroth.git qapi-backport-set3-v4
+#cd qapi-backport-set3-v4/
+#./configure --target-list=x86_64-softmmu
+# make qemu-qa
+6) Start guest agent inside guest:
+# lsmod | grep virtio (check if virtio_console is loaded)
+# ./qemu-qa -h
+# ./qemu-qa -c virtio-serial -p /dev/virtio-ports/qga
+(7) On host:
+# nc -U /tmp/qga.sock readline
+(8) Send commands to guest agent:
+
+ {"execute":"guest-sync", "arguments":{"id":1234}}
+ {"return": 1234}
+
+ {"execute":"guest-ping"}
+ {"return": {}}
+
+ {"execute": "guest-info"}
+ {"return": {"version": "1.0"}}
+
+ // write "hello world!\n" to /tmp/testqga
+ {"execute":"guest-file-open", "arguments":{"path":"/tmp/testqga","mode":"w+"}}
+ {"return": 0}
+ {"execute":"guest-file-write", "arguments":{"handle":0,"buf-b64":"aGVsbG8gd29ybGQhCg=="}}
+ {"return": {"count": 13, "eof": false}}
+ {"execute":"guest-file-close", "arguments":{"handle":0}}
+ {"return": {}}
+
+ // read back the "hello world!\n" from /tmp/testqga
+ {"execute":"guest-file-open", "arguments":{"path":"/tmp/testqga","mode":"r"}}
+ {"return": 1}
+ {"execute":"guest-file-read", "arguments":{"handle":1,"count":1024}}
+ {"return": {"buf-b64": "aGVsbG8gd29ybGQhCg==", "count": 13, "eof": true}}
+ {"execute":"guest-file-close","arguments":{"handle":1}}
+ {"return": {}}
+
+ // freeze and unfreeze freezable guest filesystems
+ {"execute":"guest-fsfreeze-status"}
+ {"return": "thawed"}
+ {"execute":"guest-fsfreeze-freeze"}
+ {"return": 3}
+ {"execute":"guest-fsfreeze-status"}
+ {"return": "frozen"}
+ {"execute":"guest-fsfreeze-thaw"}
+ {"return": 3}
+ {"execute":"guest-fsfreeze-status"}
+ {"return": "thawed"}
+
+
+*Windows guest agent
+Install a qemu-ga.exe file inside guest.
+#qemu-qa.exe -service install
+(start/stop manually via:)
+#net start qemu-ga
+#net stop qemu-ga
+
+
+4. Virtagent asynchronous commands.
+
+(1)For RHEL6.3 we will likely be disabling all of the file-* commands.
+
+guest-sync
+uest-ping
+guest-info
+guest-shutdown
+guest-suspend
+guest-fsfreeze-freeze
+guest-fsfreeze-thaw
+guest-fsfreeze-status
+guest-file-open
+guest-file-read
+guest-file-write
+guest-file-seek
+guest-file-close
+guest-file-flush
+
+
+(2)Windows only support the following commands:
+guest-ping
+guest-info
+guest-sync
+guest-shutdown
+
+- guest-file-open/read/write/close (linux-only currently)
+- guest-shutdown (linux-only currently, win32 patches on list)
+- guest-fsfreeze-freeze/thaw/status (linux-only currently)
+
+5. For live snapshot
+
+
+Current sequence when create live snapshot.
+1.) Tell guest agent to freeze the filesystem (guest-fsfreeze-freeze)
+2.) Perform the snapshot via the qemu monitor
+3.) Tell the guest agent to that the filesystem (guest-fsfreeze-thaw)
+
+ Guest         Manager           QEMU
+-------       --------          -------
+  |               |                |
+  *<--- freeze ---o                |
+  |               |                |
+  o-- return ---->*                |
+  |               |                |
+  |               o--- snapshot -->*
+  |               |                |
+  |               *<---- return ---o
+  |               |                |
+  *<--- thaw -----o                |
+  |               |                |
+  o-- return ---->*                |
+  |               |                |
+  |               |                |
+  =               =                = 
+
+6. In the futher
+Currently the guest agent is exposed to the host via a separate QEMU chardev device 
+(generally, a unix socket) that communicates with the agent using the QMP wire protocol 
+(minus the negotiation) over a virtio-serial or isa-serial channel to the guest.
+
+When guest agent passthrough support is added to QMP, a different host-side invocation 
+that doesn't involve access to the guest agent outside of QMP will be used. Something like: 
+
+ qemu \
+ ...
+ -chardev qga_proxy,id=qga0 \
+ -device virtio-serial \
+ -device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0
+ -qmp tcp:localhost:4444,server
+
+Guest agent commands will be exposed in the same manner as QMP commands using the same 
+QMP server, and communication with the agent will be handled by QEMU, transparently to 
+the client. 
+
+refference:
+http://wiki.qemu.org/Features/QAPI/GuestAgent
+

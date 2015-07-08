@@ -1,0 +1,17 @@
+==================================live snapshot==================================
+1.the latest live snapshot interface: blockdev-snapshot-sync.
+->{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "$device", "snapshot-file": "/path/to/snapshot", "format": "qcow2" } }
+->(qemu) snapshot_blkdev $device $/path/to/snapshot qcow2
+
+2.atomically operate on one or more block devices, snapshotting them or enabling mirrored writes. 
+->{ "execute": "transaction", "arguments": {'actions': [ { 'type': 'blockdev-snapshot-sync', 'data' : { 'device': '$device', 'snapshot-file': '/dev/vg_sluo_live_snapshot/sluo-snap1' } }, { 'type': 'blockdev-snapshot-sync', 'data' : { 'device': '$device', 'snapshot-file': '/dev/vg_sluo_live_snapshot/sluo-snap2' } } ] } }
+
+3.create live snapshot with existing image.
+->{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "data-scsi-disk", "snapshot-file": "/home/snapshot", "mode": "existing", "format": "qcow2" } }
+
+4.absolute-paths and existing mode.
+->{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "ide-hd0", "snapshot-file": "/some/place/my-image", "full": false, "mode": absolute-paths, "format": "qcow2" } }
+->{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "ide-hd0", "snapshot-file": "/some/place/my-image", "full": false, "mode": existing, "format": "qcow2" } }
+
+
+

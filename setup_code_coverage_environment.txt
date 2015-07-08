@@ -1,0 +1,108 @@
+==================================setup code coverage environment==================================
+
+1.Introduction to gcov
+
+Gcov is a source code coverage analysis and statement-by-statement profiling tool. Gcov generates exact counts of the number of times each statement in a program is executed and annotates source code to add instrumentation. Gcov comes as a standard utility with the GCC
+
+Works only on code compiled with GCC and collect code coverage data and generate plain text coverage report, gcov produces a test coverage analysis of a specially instrumented program. The options -fprofile-arcs -ftest-coverage should be used to compile the program for coverage analysis (first option to save line execution count and second - to record branch statistics)
+
+2. Introduction to lcov
+
+LCOV is a graphical front-end for GCC's coverage testing tool gcov. It collects gcov data for multiple source files and creates HTML pages containing the source code annotated with coverage information. It also adds overview pages for easy navigation within the file structure. LCOV supports statement, function and branch coverage measurement.
+
+3. install gcc and lcov package
+
+3.1)download
+
+git clone https://github.com/linux-test-project/lcov.git
+
+3.2) make install directly
+
+4.for qemu-kvm source code(the application of any source code problem)
+
+4.1) download qemu-kvm-rhev source code or download it from upstream
+
+wget http://download.devel.redhat.com/brewroot/packages/qemu-kvm-rhev/2.3.0/1.el7/src/qemu-kvm-rhev-2.3.0-1.el7.src.rpm
+
+4.2)decompress source code
+
+#rpm2cpio qemu-kvm-rhev-2.3.0-1.el7.src.rpm |cpio -div & tar xvf qemu-2.2.0.tar.bz2
+
+4.3)configure(notice: there are three important options ) and compile qemu-kvm source code
+
+(1) '--extra-cflags=-fprofile-arcs -ftest-coverage'  (2)--enable-trace-backends=ftrace,dtrace (3) --enable-gcov
+
+e.g
+/usr/bin/bash  ./configure  --target-list=x86_64-softmmu --prefix=/usr --sysconfdir=/etc  --audio-drv-list=pa,alsa  --disable-strip '--gcov=GCOV --enable-pie' '--extra-cflags=-fprofile-arcs -ftest-coverage'  --disable-xen --block-drv-whitelist=qcow2,raw,file,host_device,host_cdrom,qed --disable-debug-tcg --disable-sparse --disable-sdl --disable-curses --disable-curl --enable-vnc-tls --enable-vnc-sasl --disable-brlapi --disable-bluez --enable-docs --disable-vde --enable-linux-aio --enable-kvm --enable-spice --enable-trace-backends=B --enable-smartcard-nss --disable-smartcard-nss --enable-usb-redir --enable-trace-backends=ftrace,dtrace --enable-gcov
+
+5.boot qemu command line then do any operations
+
+6. quit qemu process(must quit), we can see .gcda file in source code folder
+
+7. use lcov tool to collect gcov data and generate .info file(for lcov command, can check man manual)
+
+e.g
+
+#lcov --directory /root/qemu-kvm-src/qemu-2.2.0 --capture --output-file qemu.info
+
+8. lcov tool to generate html file with qemu.info file
+
+e.g
+
+genhtml qemu.info
+
+9.use web service to display html file
+
+9.1)e.g apache  tomcat etc
+
+9.2)for apache
+
+9.3)cp 'html folder' to /var/www/html(apache default directory)
+
+9.4)service httpd restart
+
+9.5) http://hostip
+
+9.6) get as below
+
+10.for .info file, detailed explanation(Yiqiao provide)
+
+The meaning of marks in lcov(lcov is a script write with perl you can read it directly):
+
+# Traverse DIRECTORY and create a .info file for each data file found.
+
+# The .info file contains TEST_NAME in the following format:
+
+#
+
+#   TN:<test name>
+
+#
+
+# For each source file name referenced in the data file, there is a section
+
+# containing source code and coverage data:
+
+#
+
+#   SF:<absolute path to the source file>
+
+#   FN:<line number of function start>,<function name> for each function
+
+#   DA:<line number>,<execution count> for each instrumented line
+
+#   LH:<number of lines with an execution count> greater than 0
+
+#   LF:<number of instrumented lines>
+
+#-- FNDA: <call-count>, <function-name>
+
+#-- FNF: overall count of functions
+
+#-- FNH: overall count of functions with non-zero call count
+
+11. refer to link
+
+http://en.wikipedia.org/wiki/Gcov
+
+Linux Test Project - Coverage » lcov

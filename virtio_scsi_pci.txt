@@ -1,0 +1,166 @@
+==================================virtio-scsi-pci==================================
+virtio-scsi Summary:
+-------------------- 
+A new storage architecture for KVM based on SCSI.
+virtio storage interface for efficient I/O that overcomes virtio-blk limitations and supports advanced SCSI hardware. 
+
+Detailed Description:
+---------------------
+virtio-scsi improves the storage stack in terms of scalability (easily overcomes the current limit of ~30 freely hot-pluggable/unpluggable storage devices), flexibility (support features such as SCSI passthrough or persistent reservations), extensibility (exposing new features to the guest does not require updating drivers in both the host and the guest). 
+
+Implement in QEMU:
+------------------
+-drive file=/home/RHEL6.3_20120304.n.0_x86_64.qcow2,if=none,id=hd,format=qcow2,cache=none,werror=stop,rerror=stop 
+-device virtio-scsi-pci,id=scsi 
+-device scsi-disk,drive=hd,scsi-id=1,lun=0,id=scsi_image_device,bootindex=1
+
+[root@localhost home]# /usr/libexec/qemu-kvm -device ?
+name "pci-bridge", bus PCI
+name "virtio-scsi-pci", bus PCI, alias "virtio-scsi"
+name "virtio-balloon-pci", bus PCI
+name "virtio-serial-pci", bus PCI, alias "virtio-serial"
+name "virtio-net-pci", bus PCI
+name "virtio-blk-pci", bus PCI, alias "virtio-blk"
+name "i82562", bus PCI
+name "i82559er", bus PCI
+name "i82559c", bus PCI
+name "i82559b", bus PCI
+name "i82559a", bus PCI
+name "i82558b", bus PCI
+name "i82558a", bus PCI
+name "i82557c", bus PCI
+name "i82557b", bus PCI
+name "i82557a", bus PCI
+name "i82551", bus PCI
+name "i82550", bus PCI
+name "pcnet", bus PCI
+name "rtl8139", bus PCI
+name "e1000", bus PCI, desc "Intel Gigabit Ethernet"
+name "smbus-eeprom", bus I2C
+name "usb-hub", bus USB
+name "usb-host", bus USB
+name "usb-kbd", bus USB
+name "usb-mouse", bus USB
+name "usb-tablet", bus USB
+name "usb-storage", bus USB
+name "scsi-disk", bus SCSI, desc "virtual SCSI disk or CD-ROM (legacy)"
+name "scsi-block", bus SCSI, desc "SCSI block device passthrough"
+name "scsi-cd", bus SCSI, desc "virtual SCSI CD-ROM"
+name "scsi-hd", bus SCSI, desc "virtual SCSI disk"
+name "scsi-generic", bus SCSI, desc "pass through generic scsi device (/dev/sg*)"
+name "usb-ccid", bus USB, desc "CCID Rev 1.1 smartcard reader"
+name "ccid-card-passthru", bus ccid-bus, desc "passthrough smartcard"
+name "virtserialport", bus virtio-serial-bus
+name "virtconsole", bus virtio-serial-bus
+name "ich9-usb-ehci1", bus PCI
+name "usb-ehci", bus PCI
+name "i6300esb", bus PCI
+name "ne2k_pci", bus PCI
+name "ide-drive", bus IDE
+name "isa-ide", bus ISA
+name "ES1370", bus PCI, desc "ENSONIQ AudioPCI ES1370"
+name "AC97", bus PCI, desc "Intel 82801AA AC97 Audio"
+name "intel-hda", bus PCI, desc "Intel HD Audio Controller"
+name "hda-duplex", bus HDA, desc "HDA Audio Codec, duplex"
+name "hda-output", bus HDA, desc "HDA Audio Codec, output-only"
+name "VGA", bus PCI
+name "SUNW,fdtwo", bus System
+name "sysbus-fdc", bus System
+name "isa-serial", bus ISA
+name "cirrus-vga", bus PCI, desc "Cirrus CLGD 54xx VGA"
+name "isa-parallel", bus ISA
+name "sga", bus ISA, desc "Serial Graphics Adapter"
+name "ich9-usb-uhci3", bus PCI
+name "ich9-usb-uhci2", bus PCI
+name "ich9-usb-uhci1", bus PCI
+name "piix4-usb-uhci", bus PCI
+name "piix3-usb-uhci", bus PCI
+name "ib700", bus ISA
+name "ne2k_isa", bus ISA
+name "testdev", bus ISA
+name "isa-debugcon", bus ISA
+name "pci-assign", bus PCI, desc "pass through host pci devices to the guest"
+name "qxl", bus PCI, desc "Spice QXL GPU (secondary)"
+name "qxl-vga", bus PCI, desc "Spice QXL GPU (primary, vga compatible)"
+
+[root@localhost home]# /usr/libexec/qemu-kvm -device ? 2>&1 | grep scsi
+name "virtio-scsi-pci", bus PCI, alias "virtio-scsi"
+name "scsi-disk", bus SCSI, desc "virtual SCSI disk or CD-ROM (legacy)"
+name "scsi-block", bus SCSI, desc "SCSI block device passthrough"
+name "scsi-cd", bus SCSI, desc "virtual SCSI CD-ROM"
+name "scsi-hd", bus SCSI, desc "virtual SCSI disk"
+name "scsi-generic", bus SCSI, desc "pass through generic scsi device (/dev/sg*)"
+
+CLI eg:
+-------
+1.boot guest with virtio-scsi disk.
+# /usr/libexec/qemu-kvm -enable-kvm -M rhel6.3.0 -smp 2 -m 2G -usb -device usb-tablet,id=input0 -name RHEL-Server-6.3-64 -uuid 9ff50ce8-5831-4556-b43f-84e9d5145e0b -drive file=/home/RHEL6.3_20120304.n.0_x86_64.qcow2,if=none,id=hd,format=qcow2,cache=none,werror=stop,rerror=stop -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=hd,scsi-id=0,lun=0,id=scsi_image_device,bootindex=1 -netdev tap,script=/etc/qemu-ifup,id=netdev0 -device virtio-net-pci,netdev=netdev0,id=device-net0 -spice port=5910,disable-ticketing -vga qxl -monitor stdio -drive file=/home/my_qcow2_disk1.qcow2,if=none,id=data1 -device virtio-scsi-pci,id=scsi -device scsi-disk,drive=data1,scsi-id=1,lun=1,id=scsi_disk_device
+
+2.boot guest with multi virtio-scsi devices on the same target.
+# /usr/libexec/qemu-kvm -enable-kvm -M rhel6.3.0 -smp 2 -m 2G -usb -device usb-tablet,id=input0 -name RHEL-Server-6.3-64 -uuid 9ff50ce8-5831-4556-b43f-84e9d5145e0b -drive file=/home/RHEL6.3_20120304.n.0_x86_64.qcow2,if=none,id=hd,format=qcow2,cache=none,werror=stop,rerror=stop -device virtio-scsi-pci,id=scsi -device scsi-disk,drive=hd,scsi-id=1,lun=0,id=scsi_image_device,bootindex=1 -netdev tap,script=/etc/qemu-ifup,id=netdev0 -device virtio-net-pci,netdev=netdev0,id=device-net0 -spice port=5910,disable-ticketing -vga qxl -monitor stdio -drive file=/home/my_qcow2_disk1.qcow2,if=none,id=data1 -device scsi-disk,drive=data1,scsi-id=0,lun=1,id=scsi_disk_device
+
+3.install the image uing the PXE.
+# /usr/libexec/qemu-kvm -enable-kvm -M rhel6.3.0 -smp 2 -m 2G -usb -device usb-tablet,id=input0 -name RHEL-Server-6.3-64 -drive file=/home/RHEL6.3_20120304.n.0_x86_64_0308.qcow2,if=none,id=hd,format=qcow2,cache=none,werror=stop,rerror=stop -device virtio-scsi-pci,id=scsi0 -device scsi-disk,drive=hd,scsi-id=0,lun=0,id=scsi_image,bootindex=2 -netdev tap,script=/etc/qemu-ifup,id=netdev0 -device virtio-net-pci,netdev=netdev0,id=device-net0 -kernel vmlinuz -initrd initrd.img -append method=http://download.englab.nay.redhat.com/pub/rhel/nightly/RHEL6.3-20120304.n.0/6.3/Server/x86_64/os -spice port=5910,disable-ticketing -vga qxl -monitor stdio
+
+Future tasks:
+-------------
+* Pick up vhost-scsi work again:
+   o Port QEMU hw/virtio-scsi.c vhost-scsi support onto latest code
+   o add QEMU Object Model (QOM) support to the vhost-scsi device
+   o Port LIO vhost-scsi code onto latest lio.git code
+   o Update vhost-scsi to implement latest virtio-scsi device specification
+   o Ensure vhost-scsi I/O still works
+   o Design libvirt integration for LIO 
+* QEMU SCSI target:
+   o Add support for WRITE SAME commands
+   o Add support for rerror/werror to scsi-generic 
+* Complete virtio-scsi spec implementation:
+   o Add support for hotplug events
+   o Add support for asynchronous media change notifications
+   o Multi-queue (with fine-grained locking in the Linux driver?) 
+* Use cases to test:
+   o CD-ROM/DVD burning passthrough
+   o Tape passthrough
+   o 100s of LUNs (scalability) 
+* Use cases to flesh out:
+   o LUN hotplug (known to work with manual hotplug)
+   o Multipath inside guest 
+* Performance analysis
+   o Compare against virtio-blk I/O (rough numbers: 6% slower on iozone with a tmpfs-backed disk)
+   o Compare passthrough performance against bare metal host SCSI
+   o Measure scalability and where the bottlenecks are (full virtqueues? locks?) 
+
+4.install the sg3_utils and can use the scsi-rescan command.
+
+5.delete scsi disk in guest.
+# lsscsi
+[2:0:0:0]    disk    QEMU     QEMU HARDDISK    1.1.  /dev/sda 
+[2:0:1:0]    disk    IET      VIRTUAL-DISK     0001  /dev/sdb
+# echo 1 > /sys/class/scsi_device/2:0:1:0/device/delete
+
+6.100% automatically discover in the guest when change the size of the block device.
+# echo 1 > /sys/block/sdX/device/rescan
+# fdisk -l
+
+7.rescan of a SCSI bus
+Let's assume you've added a SCSI disk to a SCSI bus (either a physical or virtual device). One possibility to make it known to the system would be to reboot the server or partition. But aaargh no, this is not the prefered way. The easiest way is to rescan the whole SCSI bus which will enable the Linux kernel to detect new devices!
+To initiate a SCSI bus rescan type.
+# echo "- - -"> /sys/class/scsi_host/hostX/scan
+- X stands for the SCSI bus you want to scan.
+Please note that a rescan of the SCSI bus will only detect new devices added to the bus.
+
+8.deletion of a SCSI Device
+There might be the situation where you must remove a SCSI device from the system.
+# echo 1 > /sys/bus/scsi/drivers/sd/<SCSI-ID>/delete
+
+9.rescan of a SCSI Device.
+The problem of a SCSI bus rescan is, that it will only detect new devices. But let's assume the following situation.
+You'll have a client partition on a system with two VIO server. Each VIO server exports several virtual SCSI devices to the client partition and the client will build several RAID1 arrays on top of those devices. This setup will keep the client up and running even if on VIO server fails. 
+# echo 1 > /sys/bus/scsi/drivers/sd/<SCSI-ID>/block/device/rescan
+
+10.lsscsi - list SCSI devices (or hosts) and their attributes.
+
+
+
+
+

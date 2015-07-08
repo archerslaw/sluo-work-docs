@@ -1,0 +1,176 @@
+http://blog.sina.com.cn/s/blog_67a3453d0101j8qr.html
+
+https://help.github.com/
+http://www.yangzhiping.com/tech/github.html
+http://marklodato.github.com/visual-git-guide/index-zh-cn.html
+http://rogerdudler.github.com/git-guide/index.zh.html
+
+1.Create a new user/password from github.com
+2.Configure Git.
+# ssh-keygen -t rsa -C "sibiaoluo@gmail.com"
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa): 
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /root/.ssh/id_rsa.
+Your public key has been saved in /root/.ssh/id_rsa.pub.
+The key fingerprint is:
+a9:c1:73:2d:9c:95:67:f4:8f:8e:aa:3a:c0:1e:99:c5 sibiaoluo@gmail.com
+The key's randomart image is:
++--[ RSA 2048]----+
+|            .    |
+|           o .   |
+|     .    o o .  |
+|     .E. = o   o |
+|   . ++ S .   . .|
+|    *  = .   o   |
+|   . o.     . .  |
+|    . .    .     |
+|      .o...      |
++-----------------+
+# ls /root/.ssh/
+id_rsa       id_rsa.pub   known_hosts
+2.Add SSH Key from id_rsa.pub to github.
+github--->Account Settings--->SSH Keys--->Add SSH Key
+# cat /root/.ssh/id_rsa.pub 
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCehg3/3W2/YWLn2VB7uCaP4+PNiL8SJiy9zLZrEtWv0acncR8tIKHZXfXSm9+X40Oe18zvyCJP64ucn3kGU+4JlePnc2t9ogSOxE+vVqIVPyqm8cm4NVsRMI65NUtg95FXeYjHELmWIhYvSHRwTBP+/CRJexZcuwuouf8PJtnNbUNCmQld8rCmh191dlYM+RQerVTAXnlxjHlkOo63i1GzJRY6QvZWWHWXa+8Fk+zwaFsZG40nCTvdjJR/BFkPvf5J3I0YXq4avOPM8D8N39NlFoC+AUBpOJ4ISN5imbLF2qUtVliliTvptLVz5Cneeu+g9ZXsBf7i7xdjC46SBfyj sibiaoluo@gmail.com
+3.test the github configure successfully.
+# ssh -T git@github.com
+The authenticity of host 'github.com (207.97.227.239)' can't be established.
+RSA key fingerprint is 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'github.com,207.97.227.239' (RSA) to the list of known hosts.
+Hi sibiaoluo! You've successfully authenticated, but GitHub does not provide shell access.
+4.configure the local username and email info.
+# git config --global user.name "sibiaoluo"
+# git config --global user.email "sibiaoluo@gmail.com"
+5.add the loacal repository to github.
+# git remote add origin git@github.com:yourName/yourRepo.git
+6.initialize the local repository.
+# touch sluo.txt
+# vim sluo.txt
+# git init
+7.git push the local repository to github.
+# git add sluo.txt
+# git commit -m "my first commit"
+[master (root-commit) 835935f] my first commit
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+ create mode 100644 sluo.txt
+# git push origin master
+Username: 
+Password: 
+Counting objects: 3, done.
+Writing objects: 100% (3/3), 224 bytes, done.
+Total 3 (delta 0), reused 0 (delta 0)
+To https://github.com/sibiaoluo/python-web.git
+ * [new branch]      master -> master
+
+Create a new repository on the command line:
+# touch README.md
+# git init
+# git add README.md
+# git commit -m "first commit"
+# git remote add origin https://github.com/yourName/yourRepo.git
+# git push -u origin master
+
+Push an existing repository from the command line:
+# git remote add origin https://github.com/yourName/yourRepo.git
+# git push -u origin master
+
+
+If you want to pull a project from github, e.g: https://github.com/otherusername/ruby_koans.git
+hit 'fork': repository fock----> your repository
+new a local repository and initialize it:
+# mkdir localrepo
+# git init
+# git pull git@github.com:otherusername/ruby_koans.git
+
+# mkdir localrepo
+# cd localrepo/
+# git init
+Initialized empty Git repository in /home/python_study/localrepo/.git/
+# git pull git@github.com:sibiaoluo/python-web.git
+The authenticity of host 'github.com (207.97.227.239)' can't be established.
+RSA key fingerprint is 16:27:ac:a5:76:28:2d:36:63:1b:56:4d:eb:df:a6:48.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'github.com,207.97.227.239' (RSA) to the list of known hosts.
+remote: Counting objects: 3, done.
+remote: Total 3 (delta 0), reused 3 (delta 0)
+Unpacking objects: 100% (3/3), done.
+From github.com:sibiaoluo/python-web
+ * branch            HEAD       -> FETCH_HEAD
+
+
+= GitHub命令精简教程 =
+
+Github其实也可以作为文件分享的地方，但是免费空间只有300M，所以不能存放大文件，否则可以成为一个分享资源的下载站，而且非常方便。
+常用命令：
+# git add .   //添加所有的文件到索引
+# git commit  //向本地源码库提交，会打开默认vi编辑器写 “注释”
+# git remote add origin git@github.com:viprs/Hello-World.git   //添加远程目标为origin
+# git push origin master  //把本地源码库push到Github上
+# git pull origin  master  //从Github上pull到本地源码库
+ 
+注意：（git commit -m 'remove aa.txt' -a  千万不要用-a强制全部提交，一个项目提交几次就占用150M/300M）
+例子：新建一个“ProjClean”项目，下面是具体操作步骤。
+Global setup:
+Set up git  告诉github你是谁
+# git config --global user.name "viprs"
+# git config --global user.email xxx@gmail.com
+      
+Next steps:
+# mkdir ProjClean
+# cd ProjClean
+# git init
+# touch README
+# git add README
+# git commit -m 'first commit'
+# git remote add origin https://github.com/viprs/ProjClean.git
+# git push -u origin master
+      
+Existing Git Repo?
+# cd existing_git_repo
+# git remote add origin https://github.com/viprs/ProjClean.git
+# git push -u origin master   //-u 是提示用户名、密码
+
+如果Fork别人的项目或者多人合作项目，最好每人都拥有一个独立分支，然后由项目维护人合并。如何建立自己的分支？
+# 分支的创建和合并
+# git branch yourbranch 
+# git checkout yourbranch    切换到yourbranch
+# 开发yourbranch分支，然后开发之后与master分支合并
+# git checkout master
+# git merge yourbranch
+# git branch -d yourbranch    合并完后删除本地分支
+
+如何将牛人的远程分支更新到自己的本地分支？
+# 查看当前项目下远程
+# git remote
+# 增加新的分支链接，例如
+# git remote add niuren giturl…
+# 获取牛人的远程更新
+# git fetch niuren
+# 将牛人的远程更新合并到本地分支
+# git merge niuren/master
+
+= Git全局设置 =
+下载并安装Git:
+git config --global user.name "Your Name"
+git config --global user.email youremail@email.com
+git config --global color.ui true
+git config --list
+将Ｇit项目与Github建立联系:
+mkdir yourgithubproject
+cd yourgithubproject
+git init
+touch README
+git add README
+git commit -m 'first commit'
+git push origin master
+导入现有的Git仓库:
+cd existing_git_repo
+git remote add origin git@github.com:yourgithubname/yourgithubproject.git
+git push origin master
+日常提交常用命令:
+git add .
+git commit -a -m "some files"
+git push yourgithubproject

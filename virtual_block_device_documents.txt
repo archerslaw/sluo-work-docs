@@ -1,0 +1,221 @@
+==================================Virtual Block Device==================================
+
+1. Introduction
+1.1 Block Device
+A block device is a computer data storage device that supports reading and (optionally) writing data in fixed-size blocks, sectors, or clusters. These blocks are generally 512 bytes or a multiple thereof in size.
+Block devices often support random access and seeking, and generally use buffered input and output routines. The operating system allocates a data buffer to hold a single block each for input and output. When a program sends a request to read data from or to write data to the device, the system stores each character of that data in the appropriate buffer. When the buffer fills up, the appropriate operation takes place (data transfer) and the system clears the buffer.
+
+Example:
+# Floppy disk drives
+# Hard drives
+# Optical drives such as CD-ROM, DVD-ROM
+
+1.2 Virtual Block Device
+A virtual drive is a device that to the (guest) operating system appears to be an ordinary physical disk drive, with disc imagessubstituted for disc reading hardware through the use of software called a disk emulator, i.e. qemu in KVM.
+
+A virtual disk image is a file on a physical disk, which has a well-defned, published or proprietary, format and is interpreted by a Virtual Machine Monitor as a hard disk. In terms of naming, a virtual disk image for a certain Virtual Machine monitor has a specific file type extension, e.g., .vmdk for VMware VMDK, .qcow2 and .raw for KVM, .vhd for Xen and Microsoft Hyper-V, .vdi for Oracle VM VirtualBox, etc.
+
+
+2 How is works in kvm
+2.1 High level view
+2.1.1 General Architecture
+
+ |-------------------------|  |-----------------------|
+ |     guest os            |  |             guest os  |
+ | |------------------|    |  | |---------|           |
+ | | physical drivers |    |  | | drivers |           |
+ |-------------||----------|  |-----|-----------------|
+               ||                   |
+  passthrought ||                   |
+               ||                   |
+            |--||-------------------|----------------------|
+            |  ..        |                               | |
+            |  ..        |                               | |
+            |  ..        |  Devices emulation (qemu-kvm) | |
+            |  ..        |-------------------------------| |
+            |  ..                                          |
+            |  ..        Host OS                           |
+            |--||------------------------------------------|
+            |--||------------------------------------------|
+            |                  Hardware                    |
+            |----------------------------------------------|
+            
+2.1.2 Virtio drivers abstraction
+
+             |----------------------------------------|
+             |   guest os                             |
+             |                                        |
+             |       |------------------------------| |
+             |       | front-end drivers            | |
+             |       | ---------------------------- | |
+             |       | virtio-blk:linux:            | |
+             |       | ./drivers/block/virtio-blk.c | |
+             |       | ---------------------------- | |
+             |       | virtio                       | |
+             |       | ./drivers/virtio/virtio.c    | |
+             |----------------|-----------------------|
+                              |
+                              | ./driver/virtio/virtio_ring.c
+                              |
+            |-----------------|---------------------------|
+            |           |       back-end drivers        | |
+            |           |-------------------------------| |
+            |           |  Devices emulation (qemu-kvm) | |
+            |           |-------------------------------| |
+            |                                             |
+            |  Host OS                                    |
+            |---------------------------------------------|
+            |---------------------------------------------|
+            | Hardware                                    |
+            |---------------------------------------------|
+
+2.2 how qemu-kvm emulate and drive the disk
+   
+   Suppose we start a guest like this:
+                                               
+   %qemu-kvm -drive file=/image/rhel54_64.qcow2,if=virtio,boot=on,format=qcow2 
+            -net  nic,model=virtio,macaddr=00:A6:78:08:0D:85,vlan=0 
+            -net tap,vlan=0,script=/etc/qemu-ifup  -boot c -vnc :6 
+            -monitor stdio -name rhel54  -no-hpet -rtc-td-hack -smp 2 
+            -m 2G -uuid `uuidgen` -cpu qemu64,+sse2 -usbdevice tablet      
+
+   qemu-kvm parse the options, option "-drive" and its arguments followed will
+be parsed to function "drive_init" to parse more further. 
+
+   "drive_init" will find out the driver for the device according to the 
+"format=?", in our example. it will be qcow2 driver.
+
+    suppose device_name is to stands for the device name, then it's value will
+be like so:(if option media is not specified, it's value will be "-hd", add if
+option unit is not specified, it will find a first free unit id to use)
+
+    device_name = value of "if=" + value of "media=" + "unit="
+
+    And then device_name will be used to load the according module to emulate
+the device, in our example, it will emulate a virtio block disk.
+
+    the simple invocation flow of find out the driver
+         main
+          |
+          V
+        drive_init(drive_opts)
+          |
+          V
+        bdrv_find_format(format_name)
+
+   Similar to libvirtd, qemu-kvm also has an external variable that can be
+seen all over the program, it's "Drives_table", which is an a array to store
+the drives information:
+
+   DeviceInfo drives_table[MAX_DRIVES + 1];
+
+   The mainly data structure is showed as follows:(figure e)
+                                                                      ---------
+                                                   + "-hd" + unit_id  |       |
+                                               -----------------------|-----  |
+                                               |                      |    |  |
+                                               V                      V    |  |
+   %qemu-kvm -drive file=/image/F12.qcow2,if=virtio,boot=on,format=qcow2 \ |  |
+            -net  nic,model=virtio,macaddr=00:A6:78:08:0D:85,vlan=0 \      |  |
+            -net tap,vlan=0,script=/etc/qemu-ifup  -boot c -vnc :6 \       |  |
+            -monitor stdio -name F12  -no-hpet -rtc-td-hack -smp 2 \       |  |
+            -m 2G -uuid `uuidgen`  -cpu qemu64,+sse2                       |  |
+                                                                           |  |
+                   drives_table[MAX_DRIVES + 1]                            |  |
+   ----------------------------------------------------------------------- |  |
+   |          |                                |                         | |  |
+   | ........ | Driveinfo  drives_table_idx    |   DeviceInfo MAX_DRIVES | |  |
+   |          |         |                      |                         | |  |
+   ---------------------|------------------------------------------------- |  |
+                        |                                                  |  |
+                        |                                                  |  | 
+                        |                                                  |  | 
+                        |  struct DriveInfo                                |  |
+              ++++++++++++++++++++++++++++++++++++++++++++                 |  |
+              |   BlockDriverState *bdrv; ---------------|--------         |  |
+              |   const char *devaddr;                   |       @         |  |
+              |   BlockInterfaceType type;  <------------|@------|----------  |
+              |   int bus;                               |       |            |
+              |   int unit;                              |       |            |
+              |   int used;                              |       |            |
+              |   .......                                |       |            |
+              ++++++++++++++++++++++++++++++++++++++++++++       |            |
+                                                                 |            |
+              struct BlockDriverState  1                         |            |
+          ++++++++++++++++++++++++++++++++                       |            | 
+          |   ......                     |                       |            |
+          |   BlockDriver *drv           |                       |            |
+          |   ......                     |                       |            |
+          |   char filename[1024];       |                       |            | 
+          |   ......                     |                       |            |
+          |   char device_name[32];      |                       |            |
+          |   BlockDriverState *next; ---|------------           |            |
+          |   void *private;             |           |           |            |
+          |                              |           |           |            |
+          ++++++++++++++++++++++++++++++++           |           |            |
+                                                     |           |            |   
+                                                     |           |            |
+            struct BlockDriverState   2              |           |            |
+          ++++++++++++++++++++++++++++++++           |           |            |
+          |   ......                     |           |           |            |
+          |   BlockDriver *drv           |           |           |- bdrv_new  |
+          |   ......                     |           |           |            |
+          |   char filename[1024];       | <----------           |            |
+          |   ......                     |                       |            |
+          |   char device_name[32];      |                       |            |
+          |   BlockDriverState *next; ...|............           |            |
+          |   void *private;             |           .           |            |
+          |                              |           .           |            |
+          ++++++++++++++++++++++++++++++++           .           |            |  
+                                                     .           |            |
+                                                     .           |            |
+          The last struct BlockDriverState           .           |            |
+          ++++++++++++++++++++++++++++++++           .           |            |
+          |   ......                     |           @           |            |
+          |   BlockDriver *drv           |<----------------------@            |
+          |   ......                     |           .                        |
+          |   char filename[1024];       | <..........                        |
+          |   ......                     |                                    |
+          |   char device_name[32];  <-----------------------------------------
+          |   BlockDriverState *next; ...|
+          |   void *private;             |           
+          |                              |          
+          ++++++++++++++++++++++++++++++++           
+
+          (e) mainly data structure about device
+
+    The simple invocation flow of emulate the disk:
+          main
+           |
+           V
+       module_call_init(MODULE_INIT_BLOCK)
+
+
+3. How to use block device in kvm
+3.1 Hard Disk
+-drive file=/image_path/image_name,if=virtio/ide,media=disk
+
+3.2 CD-ROM
+-drive file=/path/to/image_name,if=ide,media=cdrom,index=xx,fmt=xx
+-cdrom /image_path/image_name
+
+3.3 Floppy
+-fda /path/to/image_name
+-fda fat:floppy:/my_directory
+
+3.4 USB Disk
+-usb -usbdevice host:xxxx:yyyy
+
+
+# Values  for disktype: ide, virtio
+# Default for disktype: ide
+
+# If the boot device type is virtio, an extra ',boot=on' option will be added to the kvm commandline. This is needed in order to boot from paravirtualised block devices.
+
+# Values  for media:    disk, cdrom
+# Default for disktype: disk
+
+
+4. Reference
+
+

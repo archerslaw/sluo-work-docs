@@ -1,0 +1,76 @@
+==================================qcow2==================================
+1.add -p option to qemu-img convert/rebase command.
+---------------------------------------------------
+1.1convert raw to qcow2 and in reversal with option -p.
+# qemu-img convert -p -f raw -O qcow2 RHEL-Server-6.1-64.raw RHEL-Server-6.1-64.qcow2
+1.2.rebase with option -p.
+# qemu-img rebase -p -b RHEL-Server-6.1-64.raw -f qcow2 RHEL-Server-6.1-64sp1.qcow2
+
+2.live resize raw/qcow2 formats block image(only for virtio block).
+-------------------------------------------------------------------
+# qemu-img create -f raw my_data_disk.raw 15G
+<qemu-kvm-command>-drive file=my_data_disk.raw,if=none,id=data_drive,format=raw,aio=native,cache=none,werror=stop,rerror=stop -device virtio-blk-pci,drive=data_drive,id=blk_data
+(qemu) block_resize $block_device_name $size
+
+3.create snapshot.
+------------------
+(qemu) snapshot_blkdev $device $new-image-file $format  <---live snapshot
+# qemu-img create -f qcow2 -b $backing_file $output_filename  <---external snapshot
+
+4.sync write to the file.
+-------------------------
+# dd if=/dev/urandom of=/home/big_file_b bs=1M count=1024 conv=sync (for linux)
+# cp large_file /mnt/; sync (for linux)
+use the sync.exe tool (for windows)
+
+5.make windows guest BSOD, rhel guest kernel OOPS.
+--------------------------------------------------
+windows: (qemu) nmi
+rhel: # echo "c" > /proc/sysrq-trigger
+
+6.configure the NFS and make soft mount.
+----------------------------------------
+# cat /etc/exports 
+/home *(rw,no_root_squash,sync)
+# mount -o soft,timeo=10~20,retrans=3,nosharecache $ip:/home/ /mnt
+
+7.strace – trace system calls and signals.
+------------------------------------------
+strace is a useful diagnostic, instructional, and debugging tool.  System administrators, diagnosticians and trouble-shooters will find it  invalu-able  for  solving  problems  with programs for which the source is not readily available since they do not need to be recompiled in order to trace them.  Students, hackers and the overly-curious will find that a great deal can be learned about a system and its  system  calls  by  tracing  even ordinary  programs.   And  programmers  will  find that since system calls and signals are events that happen at the user/kernel interface, a close examination of this boundary is very useful for bug isolation, sanity checking and attempting to capture race conditions.
+Each line in the trace contains the system call name, followed by its arguments in parentheses and its return value. 
+eg 1:
+# qemu-img create -f raw /home/test.raw 10G
+# time strace -e trace=pwrite/pread/clone qemu-img convert -t none -f raw -O raw test.raw test_new.raw
+eg 2:
+# qemu-img create -f qcow2 /tmp/backing.qcow2 100M
+# qemu-io -c 'write 0 100M' /tmp/backing.qcow2
+# qemu-img create -f qcow2 /tmp/backing_new.qcow2 100M
+# qemu-img create -f qcow2 -b /tmp/backing.qcow2 /tmp/empty.qcow2 100M
+# qemu-img info /tmp/empty.qcow2
+# time strace -f qemu-img rebase -t none -b /tmp/backing_new.qcow2 /tmp/empty.qcow2
+
+8."snapshot=on/off" parameter and "-snapshot" option.
+-----------------------------------------------------
+"snapshot=on/off" parameter:
+ snapshot is "on" or "off" and allows to enable snapshot for given drive (see "-snapshot").
+"-snapshot" option:
+ Write to temporary files instead of disk image files. In this case, the raw disk image you use is not written back. You can however force the write back by pressing Ctrl-a s.
+During emulation, if you are using the -nographic option(eg:<qemu-kvm-commandline> -nographic -vga none).
+Ctrl-a s: Save disk data back to file (if -snapshot).
+Ctrl-a c: Switch between console and monitor.
+
+9.make live snapshot in QMP via blockdev-snapshot-sync.
+-------------------------------------------------------
+9.1)blockdev-snapshot-sync device $snapshot-file $format in QMP.
+{"execute":"qmp_capabilities"}
+{ "execute": "blockdev-snapshot-sync", "arguments": { "device": "$device_name", "snapshot-file": "/some/place/my-image", "format": "qcow2" } }
+9.2)"transaction" QMP command that operates on multiple block devices atomically.
+{"execute":"qmp_capabilities"}
+{ "execute": "transaction", "arguments": {'actions': [ { 'type': 'blockdev-snapshot-sync', 'data' : { 'device': '$device_name', 'snapshot-file': '/some/place/my_image_a' } }, { 'type': 'blockdev-snapshot-sync', 'data' : { 'device': '$device_name', 'snapshot-file': '/some/place/my_image_b' } } ] } }
+
+10.perror - explain error codes
+# yum install *mysql*
+# perror $errno 
+
+
+

@@ -1,0 +1,118 @@
+
+==================================Test Longevity==================================
+
+Longevity is designed to evaluate whether or not VM can handle a steady work load for a long period time. 
+
+[root@dhcp-8-242 redhat]# cat /etc/hosts
+10.66.65.230	dhcp-8-242.nay.redhat.com	dhcp-8-242	# Added by NetworkManager
+127.0.0.1	localhost.localdomain	localhost	localhost4
+::1	dhcp-8-242.nay.redhat.com	dhcp-8-242	localhost6.localdomain6localhost6
+10.66.11.208	yang.s2
+
+http://yang.s2:8080/
+--------------------
+<RHEV-GUI-CerticateInstaller.exe>
+usrname:admin
+passwd:1234qwerP
+
+Auto SCPs:
+---------
+# rhevm-iso-uploader -i iso-domain upload {file} -u user@rhevm.example.com -p passwd
+eg: # rhevm-iso-uploader -i sluo-11-229-two upload virtio-win-1.4.0.vfd -u admin@internal -p 1234qwerP
+
+Setup the NFS Server:
+---------------------
+# cat /etc/exports 
+/home/vol-iso *(async,rw,all_squash,anonuid=36,anongid=36)
+/home/vol-Data *(async,rw,all_squash,anonuid=36,anongid=36)
+# exportfs -rav
+# service nfs restart/reload
+# chown -R 36:36 /home/vol*
+# chmod 755 /home/vol*
+
+# service iptables stop
+# setenforce 0
+
+VDSMD Server:
+-------------
+The Virtual Desktop Server Manager (VDSM) is a management module that serves as a Red Hat Enterprise Virtualization Manager (RHEV-M) agent on RHEV-Hypervisor (RHEV-H) or Red Hat Enterprise Linux hosts.
+# service vdsmd start
+
+Red Hat Network Configuration
+-----------------------------
+1.Run the rhn_register command to register the system with the Red Hat Network.
+# rhn_register
+2.Run the rhn-channel command to subscribe the system to channel.
+# rhn-channel --add --channel=rhel-x86_64-rhev-mgmt-agent-6
+Result:The system is now registered with Red Hat Network and subscribed to the channels required for Red Hat Enterprise Virtualization Manager installation.
+
+Delete the network bridge:
+--------------------------
+# ifconfig
+# brctl show
+bridge name	bridge id		STP enabled	interfaces
+switch		8000.2c4138b64024	no		eth0
+# rm -f switch
+# ifconfig switch down
+# brctl delbr switch
+# ifconfig
+
+rhevm network:
+--------------
+[root@localhost network-scripts]# cat ifcfg-eth0
+DEVICE=eth0
+ONBOOT=yes
+BOOTPROTO=none
+HWADDR=2C:41:38:B6:40:24
+BRIDGE=rhevm
+[root@localhost network-scripts]# cat ifcfg-rhevm
+DEVICE=rhevm
+TYPE=Bridge
+ONBOOT=yes
+DELAY=0
+BOOTPROTO=dhcp
+ONBOOT=yes
+
+
+intel-e5620-16-5-ilo.englab.nay.redhat.com
+intel-e5620-16-6-ilo.englab.nay.redhat.com
+username/passwd: redhat/redhat123
+
+https://qekvm2.englab.nay.redhat.com/home.php
+username/passwd: redhat/redhat
+
+createrepo:
+-----------
+[root@intel-e5620-16-5 yum.repos.d]# yum install createrepo
+
+[root@intel-e5620-16-5 yum.repos.d]# cat kvm.repo 
+[rhel6]
+name=rhel6
+#baseurl = http://porkchop.devel.redhat.com/brewroot/repos/RHEL-6-test-build/latest/x86_64/
+baseurl =  http://fileshare.englab.nay.redhat.com/pub/redhat/rhel/rel-eng/RHEL-6.2/RHEL6.2-20111117.0/x86_64/os/
+enabled=1
+gpgcheck=0
+
+[root@intel-e5620-16-5 vdsm-repo]# createrepo .
+
+[root@intel-e5620-16-5 home]# cd vdsm-repo/
+
+[root@intel-e5620-16-5 yum.repos.d]# cat vdsm.repo 
+[rhel6]
+name=rhel6
+#baseurl = http://porkchop.devel.redhat.com/brewroot/repos/RHEL-6-test-build/latest/x86_64/
+baseurl =  http://fileshare.englab.nay.redhat.com/pub/redhat/rhel/rel-eng/RHEL-6.2/RHEL6.2-20111117.0/x86_64/os/
+enabled=1
+gpgcheck=0
+
+[vdsm]
+name=vdsm
+#baseurl = http://porkchop.devel.redhat.com/brewroot/repos/RHEL-6-test-build/latest/x86_64/
+baseurl =  file:///home/vdsm-repo
+enabled=1
+gpgcheck=0
+
+[root@intel-e5620-16-5 vdsm-repo]# yum search vdsm
+
+
+

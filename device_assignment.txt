@@ -1,0 +1,226 @@
+==================================device assignment==================================
+"pci-assign", bus PCI, desc "pass through host pci devices to the guest".
+
+Setup:
+------
+Test configuration
+- BIOS: Enable VT-d and VT-x
+- Host kernel line: need to test two mode:
+1. add "intel_iommu=on" to the host kernel line
+2. "intel_iommu=on iommu=pt"
+- Check if the device supports MSI, if not, can not be assigned.
+# lspci
+# lspci -vvv -s B:D.F(There should be "Message Signal Interrupt" or "MSI" output")
+- It will be fine there are at least two NIC card in the host and one for pci assignment.
+- Enable device assignment when interrupt remapping is not supported on the platform (Intel VT-d1) can use the "allow_unsafe_assigned_interrupts=1" module option.
+# echo 1 > /sys/module/kvm/parameters/allow_unsafe_assigned_interrupts
+	
+Actions:
+--------
+1. Unbind device from host kernel driver (for example PCI device 00:19.0)
+1.1  # lspci | grep Ethernet
+00:19.0 Ethernet controller: Intel Corporation 82566DM-2 Gigabit Network Connection (rev 02)
+02:00.0 Ethernet controller: Intel Corporation 82572EI Gigabit Ethernet Controller (Copper) (rev 06)
+1.2. # lspci -n | grep 00:19.0
+00:19.0 0200: 8086:10bd (rev 02)
+1.3. # echo "8086 10bd" > /sys/bus/pci/drivers/pci-stub/new_id
+1.4. # echo 0000:00:19.0 > /sys/bus/pci/devices/0000:00:19.0/driver/unbind
+1.5. # echo 0000:00:19.0 > /sys/bus/pci/drivers/pci-stub/bind
+
+2. Boot guest without NIC card. "-net none" 
+
+3. Hot add physical NIC card to guest:
+(QMP) {"execute":"device_add","arguments":{"driver":"pci-assign","host":"00:19.0","id":"net0"}}
+
+4. Hot remove the NIC card:
+(QMP) {"execute":"device_del","arguments":{"id":"net0"}}
+
+// 2. Boot guest with virtual and physical NIC card.
+-netdev tap,id=hostnet0,vhost=on -device virtio-net-pci,netdev=hostnet0,mac=02:00:40:3F:20:20,bus=pci.0,addr=0x4,id=net0 -device pci-assign,host=00:19.0,id=h2guest_nic_1
+
+VT-d device hotplug/unplug:
+---------------------------
+If it is a guest older than rhel5 (rhel5 included), need load a module named acpiphp to support hot plug/unplug 
+In the guest: # modprobe acpiphp(If guest vesrion<rhel6.0)
+ *  hot add: 
+  (qemu)device_add pci-assign,host=00:19.0,id=mydevice
+ * hot remove: 
+  (qemu)device_del mydevice
+
+# virsh nodedev-list | grep pci
+pci_0000_00_00_0
+pci_0000_00_01_0
+pci_0000_00_16_0
+pci_0000_00_16_3
+pci_0000_00_19_0
+pci_0000_00_1a_0
+pci_0000_00_1b_0
+pci_0000_00_1c_0
+pci_0000_00_1c_4
+pci_0000_00_1c_6
+pci_0000_00_1c_7
+pci_0000_00_1d_0
+pci_0000_00_1e_0
+pci_0000_00_1f_0
+pci_0000_00_1f_2
+pci_0000_00_1f_3
+pci_0000_01_00_0
+pci_0000_01_00_1
+
+Verify that your system has IOMMU support：
+------------------------------------------
+For AMD Machine：
+ *# dmesg | grep AMD-Vi
+  ...
+  AMD-Vi: Enabling IOMMU at 0000:00:00.2 cap 0x40
+  AMD-Vi: Lazy IO/TLB flushing enabled
+  AMD-Vi: Initialized for Passthrough Mode
+  ...
+ 
+For Intel Machine：
+ *# dmesg | grep -e DMAR -e IOMMU
+  ...
+  DMAR:DRHD base: 0x000000feb03000 flags: 0x0
+  IOMMU feb03000: ver 1:0 cap c9008020e30260 ecap 1000
+  ...
+
+NIC card assigned script:
+-------------------------
+#/bin/bash
+cnt=0
+while [ 0 ]
+do
+cnt=$(expr $cnt + 1)
+virsh nodedev-reset pci_XXXX_XXXX
+/usr/libexec/qemu-kvm -m 1024 -drive file=/home/rhel6.2.qcow2 -net none -device pci-assign,host=00:19.0 & sleep 120
+kill -9 $!
+done
+
+
+Test Cases:
+-----------
+Hot plug a NIC card from host to guest
+----------------------------------------
+1. Unbind device from host kernel driver.(for example PCI device 03:00.0)
+1.1 # lspci | grep Ethernet
+01:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+02:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+03:00.0 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+03:00.1 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+1.2 # lspci -n | grep 03:00.0
+03:00.0 0200: 8086:10c9 (rev 01)
+1.3 # echo "8086 10c9" > /sys/bus/pci/drivers/pci-stub/new_id
+1.4 # echo 0000:03:00.0 > /sys/bus/pci/devices/0000:03:00.0/driver/unbind
+1.5 # echo 0000:03:00.0 > /sys/bus/pci/drivers/pci-stub/bind
+2. Boot a guest without nic card assigned.
+# /usr/libexec/qemu-kvm -m 2G -smp 2 -drive file=/home/rhel6.2-64-new-copy.qcow2,if=none,id=test,boot=on,cache=none,format=qcow2 -device ide-drive,drive=test -cpu qemu64,+sse2,+x2apic -monitor stdio -vnc :10 -qmp tcp:0:4445,server,nowait -net none
+3. Do hot plug.
+$ telnet 10.66.72.60 4445
+Trying 10.66.72.60...
+Connected to 10.66.72.60.
+Escape character is '^]'.
+{"QMP": {"version": {"qemu": {"micro": 1, "minor": 12, "major": 0}, "package": "(qemu-kvm-0.12.1.2)"}, "capabilities": []}}
+{"execute":"qmp_capabilities"}
+{"return": {}}
+{"execute":"device_add","arguments":{"driver":"pci-assign","host":"03:00.0","id":"sluo"}}
+{"return": {}}
+// (qemu) device_add pci-assign,host=03:00.0,id=sluo
+// (qemu) device_del sluo
+4. Check the guest's network
+5. # dmesg (on the host)
+pci-stub 0000:03:00.0: enabling device (0002 -> 0003)
+pci-stub 0000:03:00.0: PCI INT A -> GSI 28 (level, low) -> IRQ 28
+pci-stub 0000:03:00.0: restoring config space at offset 0xf (was 0x100, writing 0x103)
+pci-stub 0000:03:00.0: restoring config space at offset 0x7 (was 0x0, writing 0xe3140000)
+pci-stub 0000:03:00.0: restoring config space at offset 0x6 (was 0x1, writing 0xc001)
+pci-stub 0000:03:00.0: restoring config space at offset 0x5 (was 0x0, writing 0xe3400000)
+pci-stub 0000:03:00.0: restoring config space at offset 0x4 (was 0x0, writing 0xe3100000)
+pci-stub 0000:03:00.0: restoring config space at offset 0x1 (was 0x100000, writing 0x100003)
+pci-stub 0000:03:00.0: BAR 7: set to [mem 0xe3148000-0xe3167fff 64bit] (PCI address [0xe3148000-0xe3167fff]
+pci-stub 0000:03:00.0: BAR 10: set to [mem 0xe3168000-0xe3187fff 64bit] (PCI address [0xe3168000-0xe3187fff]
+assign device: host bdf = 3:0:0
+
+Boot guest with emulation NIC card and physical NIC card assigned from host
+---------------------------------------------------------------------------
+1. Unbind device from host kernel driver.(for example PCI device 03:00.0)
+1.1 # lspci | grep Ethernet
+01:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+02:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+03:00.0 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+03:00.1 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+1.2 # lspci -n | grep 03:00.0
+03:00.0 0200: 8086:10c9 (rev 01)
+1.3 # echo "8086 10c9" > /sys/bus/pci/drivers/pci-stub/new_id
+1.4 # echo 0000:03:00.0 > /sys/bus/pci/devices/0000:03:00.0/driver/unbind
+1.5 # echo 0000:03:00.0 > /sys/bus/pci/drivers/pci-stub/bind
+2. Boot guest with virtual and physical NIC card.
+# /usr/libexec/qemu-kvm -m 2G -smp 2 -drive file=/home/rhel6.2-64-new-copy.qcow2,if=none,id=test,boot=on,cache=none,format=qcow2 -device ide-drive,drive=test -cpu qemu64,+sse2,+x2apic -monitor stdio -vnc :10 -netdev tap,id=hostnet0 -device virtio-net-pci,netdev=hostnet0,mac=02:00:40:3F:20:20,bus=pci.0,addr=0x4,id=net0 -device pci-assign,host=03:00.0,id=sluo_guest_nic
+3. Repeat step 2 with rtl8139 and e1000 virtual nic card.
+
+Assigned mutilple NICs card to guest then hot unplug these
+------------------------------------------------------------
+1. Unbind device from host kernel driver.(for example PCI device 03:00.0)
+1.1 # lspci | grep Ethernet
+01:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+02:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+03:00.0 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+03:00.1 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+1.2 
+# lspci -n | grep 03:00.0
+03:00.0 0200: 8086:10c9 (rev 01)
+# lspci -n | grep 03:00.1
+03:00.1 0200: 8086:10c9 (rev 01)
+1.3 
+# echo "8086 10c9" > /sys/bus/pci/drivers/pci-stub/new_id
+# echo 0000:03:00.0 > /sys/bus/pci/devices/0000:03:00.0/driver/unbind
+# echo 0000:03:00.0 > /sys/bus/pci/drivers/pci-stub/bind
+1.4 
+# echo "8086 10c9" > /sys/bus/pci/drivers/pci-stub/new_id
+# echo 0000:03:00.1 > /sys/bus/pci/devices/0000:03:00.1/driver/unbind
+# echo 0000:03:00.1 > /sys/bus/pci/drivers/pci-stub/bind
+2. Boot the guest with more than one nic card assigned,take two for example.
+# /usr/libexec/qemu-kvm -m 2G -smp 2 -drive file=/home/rhel6.2-64-new-copy.qcow2,if=none,id=test,boot=on,cache=none,format=qcow2 -device ide-drive,drive=test -cpu qemu64,+sse2,+x2apic -monitor stdio -vnc :10 -qmp tcp:0:4445,server,nowait -net none -device pci-assign,host=03:00.0,id=sluo_guest_nic_1 -device pci-assign,host=03:00.1,id=sluo_guest_nic_2
+3. Hot unplug nic card from the guest
+$ telnet 10.66.72.60 4445
+Trying 10.66.72.60...
+Connected to 10.66.72.60.
+Escape character is '^]'.
+{"QMP": {"version": {"qemu": {"micro": 1, "minor": 12, "major": 0}, "package": "(qemu-kvm-0.12.1.2)"}, "capabilities": []}}
+{"execute":"qmp_capablities"}   
+{"error": {"class": "CommandNotFound", "desc": "The command qmp_capablities has not been found", "data": {"name": "qmp_capablities"}}}
+{"execute":"qmp_capabilities"}
+{"return": {}}
+{"execute":"device_del","arguments":{"id":"sluo_guest_nic_1"}}
+{"return": {}}
+{"execute":"device_del","arguments":{"id":"sluo_guest_nic_2"}}
+{"return": {}}
+3. Repeat hot-plug and hot-unplug for at least 3 times
+{"execute":"device_add","arguments":{"driver":"pci-assign","host":"03:00.0","id":"sluo_guest_nic_1"}}
+{"return": {}}
+{"execute":"device_add","arguments":{"driver":"pci-assign","host":"03:00.1","id":"sluo_guest_nic_2"}}
+{"return": {}}
+...
+
+Release the physical NIC card from guest, return PF back to host without reboot
+-------------------------------------------------------------------------------
+1. Boot a guest with physical NIC card assigned (for example PCI device 03:00.0).
+2. Shutdown the guest.
+3. Unbind device from host kernel driver.
+3.1 # lspci | grep Ethernet
+01:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+02:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5764M Gigabit Ethernet PCIe (rev 10)
+03:00.0 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+03:00.1 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+3.2 # lspci -n | grep 03:00.0
+03:00.0 0200: 8086:10c9 (rev 01)
+3.3 # echo "8086 10c9" > /sys/bus/pci/devices/0000:03:00.0/driver/new_id
+3.4 # echo 0000:03:00.0 > /sys/bus/pci/drivers/pci-stub/unbind
+3.5 # echo 0000:03:00.0 > /sys/bus/pci/drivers/igb/bind
+4. Check if the NIC card works on host well.
+
+
+Refference:
+-----------
+http://www.linux-kvm.org/page/How_to_assign_devices_with_VT-d_in_KVM
+
+

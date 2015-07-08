@@ -1,0 +1,88 @@
+=================================KVM IEEE test plan to git repo==================================
+
+1.install git tools.
+# yum install git
+2.config your global identify.
+$ git config --global user.name "your name"
+$ git config --global user.email "xxx@redhat.com"
+which you can check by
+$ git config --list
+3.clone remote repo.
+$ git clone git://qe-git.englab.nay.redhat.com/virt-qe/IEEE_Test_Plans/KVM
+4.config remote for pushing.
+edit "IEEE-TestPlan/.git/config", and change url of remote as follows:
+[remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git@qe-git.englab.nay.redhat.com:~/repo/virt-qe/IEEE_Test_Plans/KVM
+5.get the latest version.
+$git pull
+6.stage and commit your changes after editing.
+$ git add IEEE_Test_Plan_of_RHEL6_2_KVM.txt
+$ git commit -m "chp10: add xxx"
+7.push to remote.
+$ git push
+
+##############################
+
+kvm-qe-weekly report git repo and related configuration:
+1) Clone the repo:
+  git clone git://qe-git.englab.nay.redhat.com/virt-qe-weekly-report
+2) Update pushurl in .git/config file as below:
+... ...
+[remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git://qe-git.englab.nay.redhat.com/virt-qe-weekly-report
+        pushurl = ssh://git@qe-git.englab.nay.redhat.com/home/git/repo/virt-qe-weekly-report
+... ...
+3) Update the default name and email:
+    git config --global user.name "Your Name"
+    git config --global user.email you@example.com
+$ cat .git/config 
+[core]
+ repositoryformatversion = 0
+ filemode = true
+ bare = false
+ logallrefupdates = true
+[remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git://qe-git.englab.nay.redhat.com/virt-qe-weekly-report
+        pushurl = ssh://git@qe-git.englab.nay.redhat.com/home/git/repo/virt-qe-weekly-report
+[branch "master"]
+ remote = origin
+ merge = refs/heads/master
+
+###########################
+virt-qe-IEEE_Test_Plans.
+1) # git clone
+ssh://$username@code.engineering.redhat.com/virt-qe-IEEE_Test_Plans
+2) List the remote branches,
+    cd virt-qe-IEEE_Test_Plans
+    git branch -r
+
+3) Create the local branch based on remote branch
+    git branch KVM origin/KVM
+
+4) Switches to KVM branch
+    git checkout KVM
+
+5) pull the latest tree from remote
+    git pull
+
+6) Add/modify files
+    git add newfies
+    git commit -m "xxxx"
+
+7) Push to remote
+    git push
+
+#########################
+rhel7 qemu-kvm.git
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel7/qemu-kvm.git
+# git branch -r
+# git branch qemu-kvm-rhev7.1 origin/rhev7/master-2.1.2
+# git checkout qemu-kvm-rhev7.1
+# git pull
+# git branch -v
+  qemu-kvm-rhel7.1   40960f1 Update to qemu-kvm-1.5.3-75.el7
+* qemu-kvm-rhev7.1   021fdba Update to qemu-kvm-rhev-2.1.2-4.el7
+

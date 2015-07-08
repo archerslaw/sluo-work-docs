@@ -1,0 +1,35 @@
+==================================glusterfs==================================
+1.GlusterFS is an open source, distributed file system capable of scaling to several petabytes (actually, 72 brontobytes!) and handling thousands of clients. GlusterFS clusters together storage building blocks over Infiniband RDMA or TCP/IP interconnect, aggregating disk and memory resources and managing data in a single global namespace. GlusterFS is based on a stackable user space design and can deliver exceptional performance for diverse workloads. Goal of this translator is to use logical volumes to store VM images and expose them as files to QEMU/KVM.
+
+2.Quick start.
+1).Install gluster server.
+2).Create brick.
+# mkdir -p /home/brick1
+3).Start gluster service.
+# /bin/systemctl start  glusterd.service
+# /bin/systemctl enable glusterd.service
+4).Create volume.
+# gluster volume create sluo_volume 10.66.83.171:/home/brick1
+volume create: sluo_volume: success: please start the volume to access data
+5).Start volume.
+# gluster volume start sluo_volume
+volume start: sluo_volume: success
+6).Install glusterfs package on your host(hypervisor).
+glusterfs/glusterfs-libs/glusterfs-api
+7).Create image by gluster.
+# qemu-img create -f qcow2 gluster://10.66.83.171/sluo_volume/my-data-disk.qcow2 10G
+Formatting 'gluster://10.66.83.171/sluo_volume/my-data-disk.qcow2', fmt=qcow2 size=10737418240 encryption=off cluster_size=65536 lazy_refcounts=off 
+[I]."glusterfs:fuse" method : # mount -t glusterfs $glusterfs_server_ip:/$volume_name /mnt/
+Then you can copy the file to the /mnt/ mount point.
+[II]."libgfapi(glusterfs:native)" method: # qemu-img create -f qcow2 gluster://10.66.83.171/sluo_volume/my-data-disk.qcow2 10G
+8).Boot VM with gluster.
+e.g:...-drive file=gluster://$hostname/$volumename/test.qcow2,if=none,id=drive-virtio-disk0,format=qcow2,cache=none,werror=stop,rerror=stop,aio=threads
+
+example:
+gluster[+transport]://[server[:port]]/volname/image[?socket=...]
+
+Reference Link:
+http://www.gluster.org
+https://wiki.test.redhat.com/kvmQE/RHEL7.0/Feature%20List/Glusterfs%20Support
+http://www.gluster.org/community/documentation/index.php/QuickStart
+http://raobharata.wordpress.com/2012/10/29/qemu-glusterfs-native-integration/

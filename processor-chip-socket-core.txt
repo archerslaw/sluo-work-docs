@@ -1,0 +1,40 @@
+What is the difference between a processor, a chip, a socket, and a core?
+
+Note: After ten years of service to the national science and engineering community, the TeraGrid project has ended. It is succeeded by a new National Science Foundation (NSF) program, the Extreme Science and Engineering Discovery Environment (XSEDE). You should move any data stored on TeraGrid systems to an alternate storage resource. If you have leftover service units on your TeraGrid allocation, or if your research requires further use of high performance computational, visualization, storage, and network resources, consider applying for an allocation on one or more XSEDE digital services.
+
+Following are brief definitions for common terms related to supercomputers:
+
+Cores
+    Recent developments in computational architecture can lead to confusion concerning what a microprocessor is. Since the advent of multi-core technology such as dual-cores and quad-cores, the term "processor" has been used to describe a logical execution unit or a physical chip. A multi-core chip may have several cores. With the advent of multi-core technology, the term "processor" has become context sensitive and is largely ambiguous when describing large multi-core systems. Essentially a core comprises a logical execution unit containing an L1 cache and functional units. Cores are able to independently execute programs or threads. Supercomputers in the TeraGrid are listed as having thousands of cores.
+
+Chips
+    A chip refers to a physical integrated circuit (IC) on a computer. A chip in the context of this document refers to an execution unit that can be single- or multi-core technology.
+
+Sockets
+    The socket refers to a physical connector on a computer motherboard that accepts a single physical chip. Many motherboards can have multiple sockets that can in turn accept multi-core chips.
+
+Processes
+    A process is an independent program running on a computer. A process has a full stack of memory associated for its own use and does not depend on another process for execution. MPI processes are true processes because they can run on independent machines or the same machine.
+
+Thread
+    A thread is essentially a process that does not have a full stack of memory associated for it. The thread is tied to a parent process and is merely an offshoot of execution. Typically thread processes must run on the same computer, but can execute simultaneously on separate cores of the same node. OpenMP parallelism uses threads for child processes.
+
+Hyperthreading
+    Hyperthreading is a technology that preceded multi-core systems in which a single core would logically appear as multiple cores on the same chip. The "false cores" would gain some speed over a single core depending on the application. Most systems currently do not use hyperthreading technology, as this has been outdated by multi-core systems.
+
+N-ways
+    Multi-core compute nodes can be described by the number of execution units, or cores. A computer with 8 cores would be described as an 8-way node. This machine can have 8 independent processes running simultaneously. A 32-core system would be called a 32-way node.
+
+Processor
+    As explained above, a processor could describe either a single execution core or a single physical multi-core chip. The context of use will define the meaning of the term.
+
+Refference:
+http://kb.iu.edu/data/avfb.html
+
+For more information about these terms, see:
+http://en.wikipedia.org/wiki/Processor_core
+http://en.wikipedia.org/wiki/CPU_socket
+http://cache-www.intel.com/cd/00/00/20/57/205707_205707.pdf
+http://blogs.msdn.com/b/saponsqlserver/archive/2010/09/28/windows-2008-r2-groups-processors-sockets-cores-threads-numa-nodes-what-is-all-this.aspx
+
+

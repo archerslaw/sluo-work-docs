@@ -1,0 +1,140 @@
+==virtio-serial==
+can transfer data via every port. 
+
+1.sync and async.
+sync: connect both host and guest ports, and do data transfer.
+async: don't connect one end, send data from other end, connect the unconnected end and see if data is received properly.
+
+-Creates a two-way stream socket. If path is specified, a Unix socket is created:
+qemu-kvm [...] -chardev socket,id=unix_socket1,path=/tmp/unix_socket1,server
+The server suboption specifies that the socket is a listening socket. 
+
+-If port is specified, a TCP socket is created: 
+qemu-kvm [...] -chardev socket,id=tcp_socket1,host=localhost,port=7777,server,nowait
+The command creates a local listening (server) TCP socket on port 7777. QEMU will not block waiting for a client to connect to the listening port (nowait). 
+
+-Sends all network traffic from VM Guest to a remote host over the UDP protocol. 
+qemu-kvm [...] -chardev udp,id=udp_fwd,host=mercury.example.com,port=7777
+The command binds port 7777 on the remote host mercury.example.com and sends VM Guest network traffic there. 
+
+(1).unix socket:...-chardev socket,id=channel0,path=/tmp/serial-socket-1,server,nowait
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev socket,id=channel1,path=/tmp/helloworld1,server,nowait -device virtserialport,chardev=channel1,name=com.redhat.rhevm.vdsm.1,bus=virtio-serial0.0,id=port1,nr=1 -chardev socket,id=channel2,path=/tmp/helloworld2,server,nowait -device virtserialport,chardev=channel2,name=com.redhat.rhevm.vdsm.2,bus=virtio-serial0.0,id=port2,nr=2
+# ls -lh /dev/virtio-ports/com.redhat.rhevm.vdsm*
+lrwxrwxrwx. 1 root root 11 Jul 16 22:03 /dev/virtio-ports/com.redhat.rhevm.vdsm.1 -> ../vport0p1
+lrwxrwxrwx. 1 root root 11 Jul 16 22:03 /dev/virtio-ports/com.redhat.rhevm.vdsm.2 -> ../vport0p2
+# cat /sys/class/virtio-ports/vport0p1/name
+com.redhat.rhevm.vdsm.1
+# cat /sys/class/virtio-ports/vport0p2/name
+com.redhat.rhevm.vdsm.2
+max_ports: This option can be used to set the maximum number of allowed ports for this device. The default is 31 (the current maximum). 
+vectors: This option specifies the number of MSI vectors to be used for the device.
+
+(2).tcp socket :...-chardev socket,id=channel0,host=localhost,port=8000,server,nowait
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev socket,id=channel1,host=localhost,port=12345,server,nowait -device virtserialport,chardev=channel1,name=com.redhat.rhevm.vdsm.1,bus=virtio-serial0.0,id=port1,nr=1 -chardev socket,id=channel2,host=localhost,port=12346,server,nowait -device virtserialport,chardev=channel2,name=com.redhat.rhevm.vdsm.2,bus=virtio-serial0.0,id=port2,nr=2
+
+(3).udp option :...-chardev udp,id=id [,host=host],port=port [,localaddr=localaddr] [,localport=localport] [,ipv4] [,ipv6]
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev udp,id=channel1,host=localhost,port=12345,server,nowait -device virtserialport,chardev=channel1,name=com.redhat.rhevm.vdsm,bus=virtio-serial0.0,id=port1 -chardev udp,id=channel2,host=localhost,port=12346,server,nowait -device virtserialport,chardev=channel2,name=com.redhat.rhevm.vdsm,bus=virtio-serial0.0,id=port2
+
+2.tansfer file between host and guest via tcp or unix socket:
+-Big Size:
+host---->guest:
+host ]# cat host-file | nc -U /tmp/helloworld1
+guest]# cat /dev/vport0p1 > received-file
+guest---->host:
+guest]# cat guest-file > /dev/vport0p1
+host ]# nc -U /tmp/helloworld1 > received-file
+# md5sum $file
+# cksum $file
+
+guest---->host:                            
+guest]# cat guest-file > /dev/vport0p1   
+host ]# nc localhost 12345 >> recieve-file
+host----->guest:                           
+host ]# cat host-file | nc localhost 12346
+guest]# cat /dev/vport0p2 >> recieve-file
+
+
+-Small Size:
+guest---->host:                            
+guest]# echo "sibiaoluo" > /dev/vport0p1   
+host ]# nc localhost 12345
+host----->guest:                           
+host ]# echo "sibiaoluo" | nc localhost 12346
+guest]# cat /dev/vport0p2
+
+3.read/write in a loop.
+-guest read with port1:
+Host : # for i in $( seq 1 20 ); do cat host-file | nc -U /tmp/serial-socket-1; echo $i; done
+Guest: # for i in $( seq 1 20 ); do cat /dev/vport0p1 >> received-file; echo $i; done
+-guest write with port2:
+Guest: #for i in $( seq 1 20 ); do cat guest-file > /dev/vport0p2; echo $i; done
+Host : # for i in $( seq 1 20 ); do nc -U /tmp/serial-socket-2 >> received-file; echo $i; done
+
+==virtio-console==
+the console ports will be available in the guest as /dev/hvc0.
+configuration: 
+ 1. open /etc/inittab append:  s1:2345:respawn:/sbin/agetty -L -f /etc/issue 115200 ttyS1 vt100
+ 2. config guest kernel append:  console=ttyS1,115200
+ 3. open /etc/securetty  append : ttyS1
+-Unix socket:
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev socket,id=foo,path=/tmp/foo,server,nowait -device virtconsole,chardev=foo,name=com.redhat.rhevm.vdsm.1,bus=virtio-serial0.0,id=port1,nr=1
+# agetty /dev/hvc0 9600 vt100
+# nc -U /tmp/foo (# socat /tmp/foo)
+
+host---->guest:
+guest]# cat /dev/hvc0
+host ]# echo "sibiaoluo" | nc -U /tmp/foo
+guest---->host:
+host ]# nc -U /tmp/foo
+guest]# echo "sibiaoluo" > /dev/hvc0
+
+-TCP socket:
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev socket,id=foo,host=localhost,port=12345,server,nowait -device virtconsole,chardev=foo,name=com.redhat.rhevm.vdsm.1,bus=virtio-serial0.0,id=port1,nr=1
+# agetty /dev/hvc0 9600 vt100
+# nc localhost 12345
+host---->guest:
+guest]# cat /dev/hvc0
+host ]# echo "sibiaoluo" | nc localhost 12345
+guest---->host:
+host ]# nc localhost 12345
+guest]# echo "sibiaoluo" > /dev/hvc0
+
+guest---->host:
+guest]# cat guest-file > /dev/hvc0
+host ]# nc localhost 12345 >> recieve
+host---->guest:
+host ]# cat test-file | nc localhost 12345
+guest]# cat /dev/hvc0 >> recieve
+
+
+-UDP socket:
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev udp,id=foo,host=localhost,port=12345,server,nowait -device virtconsole,chardev=foo,name=com.redhat.rhevm.vdsm.1,bus=virtio-serial0.0,id=port1,nr=1
+# agetty /dev/hvc0 9600 vt100
+# nc -u -l localhost 12345
+
+==isa-serial==
+transfer data via every isa-serial(4 multiple isa-serial) and this scenario is only supported on Linux.
+-Unix socket:
+e.g:...-chardev socket,id=isa-serial-1,path=/tmp/isa-serial-1,server,nowait -device isa-serial,chardev=isa-serial-1 -chardev socket,id=isa-serial-2,path=/tmp/isa-serial-2,server,nowait -device isa-serial,chardev=isa-serial-2 -chardev socket,id=isa-serial-3,path=/tmp/isa-serial-3,server,nowait -device isa-serial,chardev=isa-serial-3 -chardev socket,id=isa-serial-4,path=/tmp/isa-serial-4,server,nowait -device isa-serial,chardev=isa-serial-4
+tion: 
+1. open /etc/inittab append:  s1:2345:respawn:/sbin/agetty -L -f /etc/issue 115200 ttyS1 vt100
+2. config guest kernel append:  console=ttyS1,115200
+3. open /etc/securetty  append : ttyS1
+# nc -U /tmp/isa-serial-1
+
+-Tcp socket:
+e.g:...-device isa-serial,chardev=isa-serial-1,id=isa1 -chardev socket,id=isa-serial-2,host=localhost,port=12342,server,nowait -device isa-serial,chardev=isa-serial-2,id=isa2 -chardev socket,id=isa-serial-3,host=localhost,port=12343,server,nowait -device isa-serial,chardev=isa-serial-3,id=isa3 -chardev socket,id=isa-serial-4,host=localhost,port=12344,server,nowait -device isa-serial,chardev=isa-serial-4,id=isa4
+# nc localhost 12341
+
+4.Get seabios logs with isa-debugcon.
+e.g:...-chardev file,path=/path/to/seabios.log,id=seabios \
+       -device isa-debugcon,chardev=seabios,iobase=0x402
+Check the /path/to/seabios.log file in host side.
+
+5.Enable/disable passing mouse events via vdagent.
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev spicevmc,id=vdagent,debug=0,name=vdagent -device virtserialport,chardev=vdagent,name=com.redhat.spice.0 -spice port=5931,disable-ticketing,agent-mouse=on | off
+
+6.Disable/enable copy paste between the client and the guest.
+e.g:...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,vectors=0,bus=pci.0,addr=0x3 -chardev spicevmc,id=vdagent,debug=0,name=vdagent -device virtserialport,chardev=vdagent,name=com.redhat.spice.0 -spice port=5931,disable-ticketing,disable-copy-paste
+
+

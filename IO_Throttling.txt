@@ -1,0 +1,29 @@
+IOPS: total I/O operations per second
+IOPS_rd: read I/O operations per second
+IOPS_wr: write I/O operations per second
+BPS: total throughput limit in bytes per second
+BPS_rd: read throughput limit in bytes per second
+BPS_wr: limit write bytes per second
+
+Off line I/O Throttling:
+e.g:...-drive bps=xx,bps_rd=xx,bps_wr,iops=xx,iops_rd=xx,iops_wr=xx   
+Live I/O Throttling:
+{ "execute": "block_set_io_throttle", "arguments": { "device": "ide","bps": 1024,"bps_rd": 1024,"bps_wr": 1024,"iops": 1024,"iops_rd": 0,"iops_wr": 1024 } } 
+Disable I/O Throttling:
+{ "execute": "block_set_io_throttle", "arguments": { "device": "ide","bps": 0,"bps_rd": 0,"bps_wr": 0,"iops": 0,"iops_rd": 0,"iops_wr": 0 } }
+#{"execute":"__com.redhat_drive_add", "arguments": {"file":"/mnt/add30.qcow2","format":"qcow2","id":"test30","bps": "10000000","bps_rd": "0","bps_wr": "0","iops": "100","iops_rd": 0,"iops_wr": 0}}
+#{"execute":"device_add","arguments":{"driver":"virtio-blk-pci","drive":"test30","id":"test30"}}
+
+download fio tool package from http://freecode.com/projects/fio.
+# git clone git://git.kernel.dk/fio.git
+// for rhel guest.
+sequential read/write:
+# fio --filename=/dev/sdc --direct=1 --rw=read/write --bs=1K --size=10M --name=test --iodepth=1 --ioengine=libaio
+randoms read/write:
+# fio --filename=/dev/sdc --direct=1 --rw=randread/randwrite/randrw --bs=1K --size=10M --name=test --iodepth=1 --ioengine=libaio
+//for windows guest.
+sequential read/write:
+# fio --filename=\\.\PHYSICALDRIVE1 --direct=1 --rw=read/write/wr --bs=1K --size=100M --name=test --iodepth=1 --ioengine=windowsaio
+randoms read/write:
+# fio --filename=\\.\PHYSICALDRIVE1 --direct=1 --rw=randread/randwrite/randrw --bs=1K --size=100M --name=test --iodepth=1 --ioengine=windowsaio
+How to define window disk? cmd->wmic>diskdrive(check deviceid). If format the disk, we shoudl use ' --filename=X:\file'.

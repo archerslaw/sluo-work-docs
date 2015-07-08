@@ -1,0 +1,74 @@
+1.IET, LIO and STGT/TGT.
+The exported storage entity is the target and the importing entity is the initiator.
+There are different modules available to set up the target. The SCSI Target Framework (STGT/TGT) was the standard before linux 2.6.38. The current standard is the LIO target. The iSCSI Enterprise Target (IET) is an old implementation and SCSI Target Subsystem (SCST) is the successor of IET and was a possible candidate for kernel inclusion before the decision fell for LIO. 
+
+Linux-IO Target (LIO™) is the standard open-source SCSI target in Linux. It supports all prevalent storage fabrics, including Fibre Channel (QLogic), FCoE, iEEE 1394, iSCSI, iSER (Mellanox InfiniBand), SRP (Mellanox InfiniBand), USB, vHost, etc.
+The advanced feature set of Linux-IO Target has made it the SCSI target of choice for many storage array vendors, for instance allowing them to achieve VMware® Ready certifications. Native support for LIO™ in QEMU/KVM, libvirt, and OpenStack™ (setup, code) makes it an attractive storage option for cloud deployments.
+LIO™ includes targetcli, a management shell and API with a single namespace for all storage objects.
+LIO™ and targetcli are developed by Datera, Inc., a data storage systems and software company located in Mountain View in the Silicon Valley.
+ 
+ http://linux-iscsi.org/wiki/Main_Page                                         
+ http://wiki.rvijay.in/index.php/Configuring_iSCSI_target_using_%27targetcli%27
+ https://wiki.archlinux.org/index.php/ISCSI_Target#Setup_with_LIO_Target
+ 
+ http://groveronline.com/tag/targetcli/
+ http://blog.hirudinean.org/blog/2013/11/05/booting-virtual-machines-using-iscsi-part-1/
+ http://blog.hirudinean.org/blog/2013/11/05/booting-virtual-machines-using-iscsi-part-2/
+
+2.Configure the TGT iSCSI Target.
+1).# yum install tgt,sg3_utils,scsi-target-utils,perl-Config-General RPM.
+2).if you're using a Firewall, tcp port 3260 should be open. 
+# service iptables stop
+or # system-config-firewall
+3).using the tgtadm utility, afterwards you can use tgt-admin --dump to save the configuration.
+- Backing Store
+the tgtd service will present a block device to iSCSI initiators. You may use a LVM logical volume, a disk partition, a whole disk, or a file. For production use a LVM logical volume is typically used.
+# dd if=/dev/zero of=/tmp/iscsi-disk1 bs=1M count=8000
+- Service startup
+# service tgtd start
+# chkconfig tgtd on
+Scsi-target-utils Quickstart Guide: http://fedoraproject.org/wiki/Scsi-target-utils_Quickstart_Guide
+
+3.Configure the LIO Target via targetcli.
+Install the targetcli-fb, python-rtslib-fb and python-configshell-fb package.
+Tip: You can use tab-completion in this shell, and can type cd in this shell to view & select paths.
+# systemctl start target
+# targetcli status
+# systemctl enable target
+
+# targetcli
+In this shell you include a block device (here: /dev/disk/by-id/md-name-nas:iscsi) to use with:
+/> cd backstores/block
+/backstores/block> create md_block0 /dev/disk/by-id/md-name-nas:iscsi
+Note: You can use any block device, also raid and lvm devices. You can also use files when you go to fileio instead of block.
+then create an iSCSI Qualified Name (iqn) and a target portal group (tpg) with:
+...> cd /iscsi
+/iscsi> create
+In order to tell LIO that your block device should get used as backstore for the target you issue.
+.../tpg1> cd luns
+.../tpg1/luns> create /backstores/block/md_block0
+
+Then you need to create a portal, making a daemon listen for incoming connections: 
+.../luns/lun0> cd ../../portals
+.../portals> create
+
+In order for a client/initiator to connect you need to include the iqn of the initiator in the target configuration:
+...> cd ../../acls
+.../acls> create iqn.2005-03.org.open-iscsi:SERIAL
+
+The last thing you have to do in targetcli when everything works is saving the configuration with:
+...> cd /
+/> saveconfig
+
+Disable Authentication
+Navigate targetcli to your target (i.e. /iscsi/iqn.../tpg1) and
+.../tpg1> set attribute authentication=0
+/iscsi/iqn.20...39e7a94e/tpg1> set attribute generate_node_acls=1 authentication=0
+
+Set Credentials
+Navigate to a certain acl of your target (i.e. /iscsi/iqn.../tpg1/acls/iqn.../) and
+...> get auth
+will show you the current authentication credentials.
+...> set auth userid=foo
+...> set auth password=bar
+

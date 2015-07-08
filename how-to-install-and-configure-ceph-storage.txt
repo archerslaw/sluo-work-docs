@@ -1,0 +1,337 @@
+=====How to Install and Configure Inktank Ceph storage=====
+0.Reference:
+https://access.redhat.com/discussions/1161713
+http://ceph.com/docs/next/rbd/qemu-rbd/
+
+1.the ceph nodes.
+* ceph-admin (node to manage all ceph node withtin a cluster)
+* ceph-mon (Monitor nodes)
+* ceph-osd (Object store daemon, the storage cluster)
+* ceph-client (mounting point for ceph storage)
+
+ ceph-deploy
++------------+            +----------+
+| admin-node |----------->| mon-node | monitor
++-----+------+            +----------+
+      |
+      |                   +----------+
+      +------------------>| osd-node | osd.0 ... osd.x
+                          +----------+
+
+2.On all ceph-admin add this repository ceph.repo.
+# vim /etc/yum.repos.d/ceph.repo
+[ceph-noarch]
+name=ceph noarch packages
+baseurl=http://ceph.com/rpm-firefly/el7/noarch
+enabled=1
+gpgcheck=1
+type=rpm-md
+gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+* Note: I add two repos, due to missing package 'python-jinja' in the main repo named "firefly", the scond repo "ceph-el7.repo" must be on all nodes.
+# vim /etc/yum.repos.d/ceph-el7.repo
+[Ceph]
+name=Ceph packages for $basearch
+baseurl=http://ceph.com/rpm-giant/rhel7/$basearch
+enabled=1
+gpgcheck=1
+type=rpm-md
+gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+priority=1
+
+[Ceph-noarch]
+name=Ceph noarch packages
+baseurl=http://ceph.com/rpm-giant/rhel7/noarch
+enabled=1
+gpgcheck=1
+type=rpm-md
+gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+priority=1
+
+[ceph-source]
+name=Ceph source packages
+baseurl=http://ceph.com/rpm-giant/rhel7/SRPMS
+enabled=1
+gpgcheck=1
+type=rpm-md
+gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+priority=1
+
+OR:
+# yum install -y http://download.devel.redhat.com/brewroot/packages/libunwind/1.0.1/3.el7/x86_64/libunwind-1.0.1-3.el7.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/libunwind/1.0.1/3.el7/x86_64/libunwind-devel-1.0.1-3.el7.x86_64.rpm http://download.devel.redhat.com/brewroot/packages/libunwind/1.0.1/3.el7/x86_64/libunwind-debuginfo-1.0.1-3.el7.x86_64.rpm
+# yum install -y http://eu.ceph.com/rpms/rhel7/x86_64/python-jinja2-2.6-6.el7.noarch.rpm
+
+# cat /etc/yum.repos.d/Ceph-el7.repo
+[Ceph-el7]
+name=Ceph-el7
+baseurl=http://eu.ceph.com/rpms/rhel7/noarch/
+enabled=1
+gpgcheck=0
+
+3.Prepare 3 boxes, short names are admin-node, mon-node and osd-node respectively. admin-node is used as admin node, mon-node is used as monitor node and 1st osd node, osd-node is used as 2nd osd node.
+admin-node] # ssh-keygen
+admin-node] # ssh-copy-id mon-node
+admin-node] # ssh-copy-id osd-node
+
+4.Install ceph-deploy on admin-node.
+admin-node] # yum install ceph-deploy //this done one time *only* on ceph-admin node
+
+5.Login to cep-admin node and create a folder to obtain cluster files.
+admin-node] # mkdir my-cluster
+admin-node] # cd my-cluster
+
+6.Add monitor-node and osd-node nodes' ip/hostname to /etc/hosts in admin node.
+
+7.Create the cluster via 'ceph-deploy new {initial-monitor-node(s)}' to initiate the ceph monitor node.
+admin-node] # ceph-deploy new mon-node //create cluster and to initiate the ceph monitor node
+
+8.Change the default number of replicas in the Ceph configuration file from 3 to 1 so that Ceph can achieve an active + clean state with just two Ceph OSDs. Add the following line under the [global] section:
+# tail -n 1 /home/my-my-cluster/ceph.conf
+osd pool default size = 1
+
+admin-node] # yum -y install yum-plugin-priorities
+admin-node] # yum install libunwind gdisk python-jinjia2 cryptsetup hdparm python-requests redhat-lsb-core python-requests boost-system boost-thread
+
+9.Install ceph on all nodes, then remove kvm.repo.
+* Note that leave at least a repo.
+admin-node] # ceph-deploy install admin-node mon-node osd-node
+
+10.Add the initial monitors and gather the keys(new in ceph-deploy v1.1.3).
+admin-node] # ceph-deploy mon create-initial //this indicate only ceph-mon will act as ceph monitor node.
+
+*Note: In earlier versions of ceph-deploy, you must create the initial monitor(s) and gather keys in two discrete steps.
+First, create the monitor.
+admin-node]# ceph-deploy mon create {mon-node}
+Then, gather the keys.
+admin-node]# ceph-deploy gatherkeys {mon-node}
+Once you complete the process, your local directory(/home/my-cluster) should have the following keyrings:
+{cluster-name}.client.admin.keyring
+{cluster-name}.bootstrap-osd.keyring
+{cluster-name}.bootstrap-mds.keyring
+
+*Note:
+(1).If you need more monitor nodes run this, ceph-deploy install mon-01 mon-02, etc.
+(2).If at any point you run into trouble and you want to start over, execute the following to purge the configuration:
+# ceph-deploy purge admin-node node1 node2
+# ceph-deploy purgedata admin-node node1 node2
+# ceph-deploy forgetkeys
+
+11.Add the two osds with directory rather than an entire disk per Ceph OSD Daemon.
+mon-node] # mkdir /var/local/osd0
+osd-node] # mkdir /var/local/osd1
+
+12.Using separate disks/partitions for OSDs and journals, login to the Ceph Nodes and create a directory for the Ceph OSD Daemon.
+(1).list all disk on OSD's nodes.
+admin-node]# ceph-deploy disk list osd-node  // or:/usr/sbin/ceph-disk list
+           [admin-node][DEBUG ] /dev/sdb :
+(2).Zap a disk (wipe all data on that disk).
+admin-node]# ceph-deploy disk zap --fs-type xfs|ext4 osd-node:/dev/sdb
+(3).Create OSD.
+admin-node]# ceph-deploy osd create osd-node:/dev/sdb
+* Note: commnad ceph-deploy osd create did prepare, and activate automaticlly the OSD daemons on that node.
+admin-node]# ceph-deploy osd prepare osd-node:/dev/sdb
+admin-node]# ceph-deploy osd activate osd-node:/dev/sdb1
+admin-node]# df -h | grep sdb1
+           /dev/sdb1 5.0G   34M  5.0G   1% /var/lib/ceph/osd/ceph-2
+
+13.Use ceph-deploy to prepare and activate the OSDs from admin node.
+admin-node] # ceph-deploy osd prepare mon-node:/var/local/osd0 osd-node:/var/local/osd1
+            <==>ceph-disk -v prepare --fs-type xfs --cluster ceph -- /var/local/osd0
+admin-node] # ceph-deploy osd activate mon:/var/local/osd0 osd2:/var/local/osd1
+OR:admin-node]# ceph-deploy osd create osd-node:/var/local/osd0
+
+admin-node]# ceph-deploy osd prepare osd-node:/dev/sdb
+admin-node]# ceph-deploy osd activate osd-node:/dev/sdb1
+
+14.Use ceph-deploy to copy the configuration file and admin key to your admin node and your Ceph Nodes so that you can use the ceph CLI without having to specify the monitor address and ceph.client.andmin.keyring each time you execute a command.
+admin] # ceph-deploy admin $admin $mon $osd2
+
+15.Ensure that you have the correct permissions for the ceph.client.admin.keyring on each Ceph Nodes.
+# chmod +r /etc/ceph/ceph.client.admin.keyring  //on each Ceph Nodes
+
+16.check ceph health and status.
+# ceph health //Result HEALTH_OK
+HEALTH_OK
+# ceph -w // show the total storage and other information
+    cluster 09aeba51-7ec2-4b98-acfe-a873df42be68
+     health HEALTH_OK
+     monmap e1: 1 mons at {mon-node=10.66.8.187:6789/0}, election epoch 1, quorum 0 mon-node
+     osdmap e14: 3 osds: 1 up, 1 in
+      pgmap v34: 192 pgs, 2 pools, 284 bytes data, 3 objects
+            35184 kB used, 5074 MB / 5108 MB avail
+                 192 active+clean
+2015-01-28 17:21:42.152692 mon.0 [INF] pgmap v34: 192 pgs: 192 active+clean; 284 bytes data, 35184 kB used, 5074 MB / 5108 MB avail
+*Note: your cluster should return an active+clean state when it has finished peering.
+
+17.Adding MSD server on ceph-admin node:
+admin-node ] # ceph-deploy mds create admin-node
+*Note: if you don't need to mount using nfs,samba,cifs,ceph-fuse, no need to install MDS server (Metadata server)
+
+18.remove authentication to set your OSD server with no password for your admin-node, mon-node and osd-node.
+Authentication is enabled by default, disable it as following.
+Disable cephx authentication by setting the following options in the [global] section of your Ceph configuration file:
+auth cluster required = none
+auth service required = none
+auth client required = none
+
+Then restart the Ceph cluster service.
+# service ceph restart
+
+19.start to use ceph.
+
+19.1.list pools.
+Create a pool storage to use later.
+# ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated]
+ PG-num has a default value = 100
+ PGP-num has adefault value = 100
+To calculate your placement group count, multiply the amount of OSDs you have by 100 and divide it by the number of number of times each part of data is stored. The default is to store each part of data twice which means that if a disk fails, you won’t loose the data because it’s stored twice.
+e.g: 3 OSDs * 100 = 300
+     Divided by 2 replicas, 300 / 2 = 150
+     ~~~ ceph osd pool create $sluo-pool 150 150
+
+# ceph osd pool create sluo-pool 128 128
+pool 'sluo-pool' created
+# ceph osd lspools
+0 rbd,1 sluo-pool,
+# ceph osd dump
+epoch 11
+fsid 09aeba51-7ec2-4b98-acfe-a873df42be68
+created 2015-01-28 16:12:47.278113
+modified 2015-01-28 16:39:19.282232
+flags 
+pool 0 'rbd' replicated size 1 min_size 1 crush_ruleset 0 object_hash rjenkins pg_num 64 pgp_num 64 last_change 1 flags hashpspool stripe_width 0
+pool 1 'sluo-pool' replicated size 1 min_size 1 crush_ruleset 0 object_hash rjenkins pg_num 128 pgp_num 128 last_change 11 flags hashpspool stripe_width 0
+max_osd 3
+osd.0 down out weight 0 up_from 0 up_thru 0 down_at 0 last_clean_interval [0,0) :/0 :/0 :/0 :/0 exists,new ac95433d-1af6-45a7-84e2-7e3b823d0099
+osd.1 down out weight 0 up_from 0 up_thru 0 down_at 0 last_clean_interval [0,0) :/0 :/0 :/0 :/0 exists,new 08c19998-edd5-47ea-992c-3184649754c1
+osd.2 up   in  weight 1 up_from 9 up_thru 9 down_at 8 last_clean_interval [6,8) 10.66.9.54:6800/6921 10.66.9.54:6801/6921 10.66.9.54:6802/6921 10.66.9.54:6803/6921 exists,up 9a74f5fc-182f-4317-8067-d2efd5580c85
+
+You should override the default value for the number of placement groups in you Ceph configuration file before creating pools, as the default is NOT ideal.
+Ideally: pg/pgp number = 100*osd.no/replicated size
+ * osd pool default pg num = 100
+ * osd pool default pgp num = 100
+PG and PGP should be equal (for now).
+To create a pool, execute:
+e.g1# ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] [crush-ruleset-name]
+e.g2# ceph osd pool create {pool-name} {pg-num} {pgp-num} erasure [erasure-code-profile] [crush-ruleset-name]
+
+# ceph osd pool create libvirt-pool 150 150
+pool 'libvirt-pool' created
+
+To delete a pool, execute:
+# ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
+To rename a pool, execute:
+# ceph osd pool rename {current-pool-name} {new-pool-name}
+To show a pool’s utilization statistics, execute:
+# rados df
+To make a snapshot of a pool, execute:
+# ceph osd pool mksnap {pool-name} {snap-name}
+To remove a snapshot of a pool, execute:
+# ceph osd pool rmsnap {pool-name} {snap-name}
+
+19.3.remove pool.
+# ceph osd pool delete libvirt-pool libvirt-pool --yes-i-really-really-mean-it
+pool 'libvirt-pool' removed
+
+19.4.create image on the ceph backend using qemu-img access ceph server.
+# qemu-img create -f raw rbd:{pool-name}/{image-name}:mon_host=$ip {size}
+
+# cat /etc/ceph/ceph.conf 
+[global]
+fsid = 09aeba51-7ec2-4b98-acfe-a873df42be68
+mon_initial_members = mon-node
+mon_host = 10.66.8.187
+auth_cluster_required = none
+auth_service_required = none
+auth_client_required = none
+filestore_xattr_use_omap = true
+osd_pool_default_size = 1
+
+# qemu-img create -f raw rbd:sluo-pool/sluo-image.raw:mon_host=10.66.8.187 1G
+Formatting 'rbd:sluo-pool/sluo-image.raw:mon_host=10.66.8.187', fmt=raw size=1073741824 cluster_size=0
+# qemu-img info rbd:sluo-pool/sluo-image.raw:mon_host=10.66.8.187
+image: rbd:sluo-pool/sluo-image.raw:mon_host=10.66.8.187
+file format: raw
+virtual size: 1.0G (1073741824 bytes)
+disk size: unavailable
+e.g:# /usr/libexec/qemu-kvm....-drive file=rbd:sluo-pool/sluo-image.raw:mon_host=10.66.8.187,if=none,id=drive-data-disk,format=raw,cache=none,aio=native -device virtio-blk-pci,bus=pci.0,addr=0x8,drive=drive-data-disk,id=data-disk
+
+19.5.for now the ceph storage cluster ready and operational as well. I show you how to mount ceph storage on client server using Block Device.
+### Preparing ceph clients:
+* Check if rbd kernel module is loaded.
+client] # modprobe rbd
+Note: if the loaded failed, you must install rbd kmod.
+client]# yum install kmod-rbd kmod-libceph -y
+Then modprobe rbd.
+* Create an image or block device.
+# rbd create vol1 --size 4096 --pool datastore
+# rbd map vol1 --pool datastore
+# rbd ls -p datastore // list block device in pool datastore
+# mkfs.ext4 -m0 /dev/rbd/datastore/vol1 // make fs on block device
+# mkdir /mnt/vol1
+# mount /dev/rbd/datastore/vol1 /mnt/vol1
+Add to fstab to mount on boot as any other device block.
+
+At this point Ceph storage cluster operate as well and mount the client to ceph cluster.
+
+20.How to start and stop ceph services.
+# service ceph -a start // -a mean all service
+# service ceph -a start osd // only for OSD nodes
+
+21.Prepare a none-root user.
+*We need add user 'ceph' on all nodes, follow these steps:
+#useradd -d /home/ceph -m ceph
+#passwd ceph
+*Add sudo privileges for the user on each Ceph Node.
+#echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
+#chmod 0440 /etc/sudoers.d/ceph
+*Configure your ceph-deploy admin node with password-less SSH access to each Ceph Node.
+#ssh-keygen // dont set pass phrase
+#ssh-copy-id to other nodes (ceph-mon, ceph-osd-x, ceph-clients-x)
+*Configure /etc/ssh/ssh_config, and those lines.
+Host ceph-mon
+     Hostname ceph-mon
+     User ceph
+Host ceph-osd-01
+     Hostname ceph-osd-01
+     User ceph
+
+Host ceph-osd-02
+     Hostname ceph-osd-02
+     User ceph
+...
+*Update your repository and install ceph-deploy.
+#yum install ceph-deploy // this done one time only on ceph-admin node
+
+22.How to mount ceph storage on client server using Block Device.
+Preparing ceph clients:
+* Check if rbd kernel module is loaded.
+# lsmod | grep rbd
+# modprobe rbd
+Note: if the loaded failed, you must install rbd kmod.
+# yum install kmod-rbd kmod-libceph -y; modprobe rbd
+
+* Create an image or block device.
+# rbd create vol1 --size 4096 --pool $sluo-pool
+# rbd map vol1 --pool $sluo-pool
+/dev/rbd0
+# rbd ls -p $sluo-pool // list block device in pool $sluo-pool
+sluo-testing-image.raw
+vol1
+# mkfs.ext4 -m0 /dev/rbd/sluo-pool/vol1 // make fs on block device
+# mkdir /mnt/vol1
+# mount /dev/rbd/sluo-pool/vol1 /mnt/vol1
+Add to fstab to mount on boot as any other device block.
+
+Define a guest with the RBD disk following xml.
+...
+    <disk type='network' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source protocol='rbd' name='libvirt-pool/rbd1.img'>
+      <config file='/etc/ceph.conf'/>
+      </source>
+      <target dev='vda' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x08' function='0x0'/>
+    </disk>
+e.g:...-drive file=rbd:libvirt-pool/rbd1.img:auth_supported=none:conf=/etc/ceph.conf,if=none,id=drive-virtio-disk0,format=raw -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x8,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1
+

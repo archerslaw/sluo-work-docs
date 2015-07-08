@@ -1,0 +1,32 @@
+==================================host opertion==================================
+1.host suspend to mem/disk with guest running.
+ # echo mem >/sys/power/state - (S3)
+ # echo disk >/sys/power/state - (S4)
+2.load/unload kvm module.
+ Remove kvm module 
+ # modprobe -r kvm-intel (kvm-amd)
+ # modprobe -r kvm
+ Load kvm module
+ # modprobe  kvm-intel (kvm-amd)
+ # modprobe  kvm
+3.host kdump with kvm guest running.
+ reboot host after edit grub.conf: 
+ # cat /boot/grub/grub.conf
+    title Red Hat Enterprise Linux Server (2.6.32-71.el6.x86_64)
+        root (hd0,0)
+        kernel /vmlinuz-2.6.32-71.el6.x86_64 ro root=/dev/mapper/vg_dhcp668350-lv_root rd_LVM_LV=vg_dhcp668350/lv_root rd_LVM_LV=vg_dhcp668350/lv_swap rd_NO_LUKS rd_NO_MD rd_NO_DM LANG=en_US.UTF-8 SYSFONT=latarcyrheb-sun16 KEYBOARDTYPE=pc KEYTABLE=us [crashkernel=128M] rhgb quiet
+        initrd /initramfs-2.6.32-71.el6.x86_64.img
+ 1)in host, make sure kdump is configured.
+   # dmesg  | grep crashkernel
+   Reserving 128MB of memory at 48MB for crashkernel (System RAM: 8928MB)
+   # service kdump status
+   Kdump is operational
+ 2)start kvm process.
+ 3)trigger a crash:
+   # echo c > /proc/sysrq-trigger
+ 4)in host. find if the vmcore exist:
+   # ls -l /var/crash/127.0.0.1-2010-09-12-17\:54\:43/vmcore   //depend on your test os and time
+ 5)open the vmcore with crash(install kernel-debuginfo and kernel-debuginfo-common).
+   # crash /usr/lib/debug/lib/modules/`uname -r`/vmlinux /var/crash/127.0.0.1-2010-09-12-17\:54\:43/vmcore
+ 6)run sub-command in crash(log,ps,bt) to get the log.
+   crash> bt

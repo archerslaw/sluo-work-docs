@@ -1,0 +1,899 @@
+==================================qemu-kvm-personal-documents==================================
+1.how to use the iSCSI.
+-----------------------
+# yum install iscsi-initiator-utils / iscsi-initiator-utils-devel
+discover Targets:
+# iscsiadm --mode discovery --type sendtargets --portal 10.66.90.100 –discover / # iscsiadm --mode discovery --type sendtargets --portal 10.66.6.78 –discover
+10.66.90.100:3260,1 iqn.2001-05.com.equallogic:0-8a0906-0971f7d03-1dff49b26885073d-s2-sluo-172259
+# iscsiadm --mode discovery --type sendtargets --portal 10.66.90.100 –discover
+10.66.90.100:3260,1 iqn.2001-05.com.equallogic:0-8a0906-6b21f7d03-af9f49b26b85108e-s2-sluo-186134
+# iscsiadm -m node -T iqn.2001-05.com.equallogic:0-8a0906-0971f7d03-1dff49b26885073d-s2-sluo-172259 -p 10.66.90.100 -l / # iscsiadm -m node -T test4 -p 10.66.6.78 -l
+Logging in to [iface: default, target: iqn.2001-05.com.equallogic:0-8a0906-0971f7d03-1dff49b26885073d-s2-sluo-172259, portal: 10.66.90.100,3260] (multiple)
+Login to [iface: default, target: iqn.2001-05.com.equallogic:0-8a0906-0971f7d03-1dff49b26885073d-s2-sluo-172259, portal: 10.66.90.100,3260] successful.
+# pvscan
+# vgscan
+# lvscan
+  inactive          '/dev/reproduction/rhel6.2.x86_64' [20.00 GiB] inherit
+...
+# lvchange -ay /dev/reproduction/rhel6.2.x86_64
+InitiatorName:
+# cat /etc/iscsi/initiatorname.iscsi
+InitiatorName=iqn.1994-05.com.redhat:713263a9b5eb
+Configure the iscsi.conf:
+/etc/iscsi/iscsi.conf
+start the iscsi server and check the status:
+# service iscsi start
+# service iscsid status
+check the iSCSI session info:
+# iscsiadm -m session -i
+2.install the windows guest with ISO and Floppy driver.
+-------------------------------------------------------
+<qemu-kvm-command>...-drive file=/usr/share/virtio-win/virtio-win-1.5.1.iso,if=none,id=drive-ide0-0-3,werror=stop,rerror=stop,cache=none,format=raw,media=cdrom,readonly=on -device ide-drive,drive=drive-ide0-0-3,id=ide0-0-3,bus=ide.1,unit=1 -drive file=/usr/share/virtio-win/virtio-win-1.5.1.vfd,if=none,id=f1,format=raw,cache=none -global isa-fdc.driveA=f1
+
+3.how to use the serial ports/monitor/QMP.
+-----------------------------------------
+<qemu-kvm-command>...-device sga -chardev socket,id=serial0,path=/var/sluo,server,nowait -device isa-serial,chardev=serial0 -monitor unix:/tmp/monitor1,server,nowait -monitor stdio -qmp tcp:0:4444,server,nowait
+# nc -U /var/sluo ---> to output the seabios/kernel infomation via serial ports (...-device sga -serial stdio).
+# nc -U /tmp/monitor1 ---> to get the monitor console.
+# telnet $host_ip $port
+{"execute":"qmp_capabilities"}
+yum install iscsi-initiator-utils
+4.the command line for using the VNC/spice.
+-------------------------------------------
+...-spice disable-ticketing,port=5931 -vga qxl
+...-vnc :1
+
+5.hot plug virtio-scsi device var QMP.
+--------------------------------------
+{"execute":"qmp_capabilities"}
+{"execute":"__com.redhat_drive_add","arguments":{"file":"/home/my_big_qcow2_disk.qcow2","format":"qcow2","id":"my_big_test_disk"}}
+{"execute":"device_add","arguments":{"driver":"virtio-scsi-pci","id":"bus2"}}
+{"return": {}}
+{"execute":"device_add","arguments":{"driver":"scsi-hd","drive":"my_big_test_disk","id":"my_disk"}} 
+{"return": {}}
+
+# yum install portmap nfs-utils
+# systemctl enable nfs-server.service
+# cat /etc/exports
+/home *(rw,no_root_squash,sync) 
+# systemctl restart nfs-server.service
+
+soft mount:
+# mount -o soft,timeo=15,retrans=3,nosharecache $nfs_server_ip:/home/ /mnt/
+# mount -o soft,timeo=600,retrans=2,nosharecache localhost:/home /mnt
+
+6. the NFS server of our team.
+------------------------------
+# mount 10.66.90.121:/vol/S2/nfs /mnt/
+# mount 10.66.90.128:/vol/S2/kvmauto/iso on /home/kvm_autotest_root/iso
+# mount -t nfs,rsize=32768,wsize=32768,intr,noatime 10.66.90.128:/vol/S2/kvmauto /mnt/
+
+7.configure the NFS server.
+---------------------------
+# cat /etc/exports
+/home *(rw,no_root_squash,sync)
+# exportfs -rav 
+exporting *:/home 
+# service nfs restart
+
+8.install the host via VNC connection.
+--------------------------------------
+rhel6.x:
+# vim grub/grub.conf 
+...
+default=0
+timeout=5
+splashimage=(hd0,0)/grub/splash.xpm.gz
+hiddenmenu
+title sluo
+        root (hd0,0)
+        kernel /vmlinuz vnc vncconnect=dhcp headless ip=dhcp ksdevice=eth0 method=http://tree.englab.nay.redhat.com/pub/rhel/rel-eng/RHEL6.3/RHEL6.3-20120516.0/x86_64/os/ lang=en_US keymap=us
+        initrd /initrd.img
+...
+...console=tty0 console=ttyS0,115200
+
+rhel7.x:
+# vim /boot/grub2/grub.cfg
+title sluo                                                                  
+        root (hd0,0)
+        linux16 /vmlinuz vnc vncconnect=dhcp headless ip=dhcp ksdevice=eth0 method=http://tree.englab.nay.redhat.com/pub/rhel/rel-eng/RHEL6.3/RHEL6.3-20120516.0/x86_64/os/ lang=en_US keymap=us
+        initrd16 /initrd.img
+...
+
+9.kvm userspace code (libkvm and qemu) is available through a git tree.
+-----------------------------------------------------------------------
+create a repository using git:
+# git clone git://git.kernel.org/pub/scm/virt/kvm/qemu-kvm.git / # git clone git://git.qemu.org/qemu.git
+# git clone git://git.seabios.org/seabios.git / # git clone git://git.kernel.org/pub/scm/virt/kvm/seabios.git
+# git clone git://git.kernel.org/pub/scm/virt/kvm/qemu-kvm.git
+# git clone git://git.kernel.org/pub/scm/virt/kvm/seabios.git
+
+upstream:
+# git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+# git clone git://git.qemu-project.org/qemu.git
+downstream:
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel7/qemu-kvm.git
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel6/qemu-kvm.git
+# git clone git://git.app.eng.bos.redhat.com/rhel7.git
+# git clone git://git.app.eng.bos.redhat.com/rhel6.git
+
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel7/qemu-kvm.git
+qemu-kvm-rhel7.1 -> remotes/origin/rhel7/master-1.5.3
+qemu-kvm-rhev7.1 -> remotes/origin/rhev7/master-2.1.2
+
+for subsequent upgrades use the command in the git working directory:
+# git pull
+# git clone git@qe-git.englab.nay.redhat.com:~/repo/s2/IEEE-TestPlan/
+
+10.binding Processes to CPUs using the taskset utility.
+-------------------------------------------------------
+set cpu affinity vcpu threads via "taskset -c 1” to boot two guests (with -smp 1) bound to the same CPU.
+# taskset -c 1 /usr/libexec/qemu-kvm -M rhel6.3.0 -cpu SandyBridge -enable-kvm -smp 1 ...
+
+11.taskset is used to set or retrieve the CPU affinity of a running process given its PID or to launch a new COMMAND with a given CPU affinity.
+----------------------------
+# taskset -cp $cpu-list $pid
+pid $pid's current affinity list: xxx
+pid $pid's new affinity list: $cpu-list
+
+12.netperf stress test should do 3 senario.
+-------------------------------------------
+external -> guest
+host -> guest
+guest -> guest
+while true; do for b in 32 64 128 256 512 1024 2048 4096 8192 16834; do netperf -t UDP_STREAM -f m -H 192.168.0.12 -P 0 -l 10 -- -m $b; done; done
+#!/bin/bash
+while true
+do 
+   netperf -H 10.66.105.226 -l 60
+   netperf -H 10.66.105.226 -l 60 -- -m 2048
+   netperf -t UDP_STREAM -H 10.66.105.226 -l 60
+   netperf -t UDP_STREAM -H 10.66.105.226 -- -m 1024
+   netperf -t TCP_RR -H 10.66.105.226
+   netperf -t TCP_RR -H 10.66.105.226 -- -r 32,1024
+   netperf -t TCP_CRR -H 10.66.105.226
+   netperf -t UDP_RR -H 10.66.105.226
+done
+
+13.QEMU Monitor Protocol.
+-------------------------
+The QEMU Monitor Protocol (QMP) is a JSON-based protocol which allows applications to communicate with a QEMU instance. 
+The "{ "return": {}}" response is QMP's success response. An error response will contain the "error" keyword instead of "return". 
+1)start QMP on a TCP socket, so that telnet can be used
+ # <qemu-kvm-command-line>...-qmp tcp:localhost:4444,server
+2)run telnet
+ $ telnet $localhost $port
+3)you should see QMP's greeting banner
+ {"QMP": {"version": {"qemu": {"micro": 50, "minor": 13, "major": 0}, "package": ""}, "capabilities": []}}
+4)issue the qmp_capabilities command, so that QMP enters command mode
+ { "execute": "qmp_capabilities" }
+5).you can now issue commands. For example, to get a list of QMP supported commands, issue query-commands
+ { "execute": "query-commands" }
+ NOTE: all "info" commands are available under QMP as "query-", for example "info vnc" is "query-vnc" 
+
+14.Transfer file from guest to extrnal host by UDP.
+---------------------------------------------------
+Host: # nc -u -l 1234 > host_file
+Guest:# nc -u $host_ip_addr 1234 < guest_file
+capture packet size by tcpdump in guest: # tcpdump -vvv -i eth0
+
+15.make a ISO file via mkisofs.
+-------------------------------
+# mkisofs -o virtio-win-32.iso ./virtio-win-32
+
+16.boot from network( gpxe and etherboot ).
+-------------------------------------------
+# alternatives --config qemu-pxe-roms
+
+There are 2 programs which provide 'qemu-pxe-roms'.
+
+  Selection    Command
+-----------------------------------------------
+*  1           /usr/share/etherboot
+ + 2           /usr/share/gpxe
+
+Enter to keep the current selection[+], or type selection number: 2
+
+17.clean the dmesg info.
+------------------------
+# dmesg -c
+
+18.DMI table decoder.
+---------------------
+# dmidecode
+dmidecode is a tool for dumping a computer’s DMI (some say SMBIOS) table contents in a human-readable format.
+
+19.repository of yum.
+---------------------
+for rhel5 host:
+# cat /etc/yum.repos.d/rhel.repo 
+[rhel5]
+name=rhel5
+baseurl=http://download.englab.nay.redhat.com/pub/path/to/Server/
+enabled=1
+gpgcheck=0
+
+[VT]
+name=VT
+baseurl=http://download.englab.nay.redhat.com/pub/path/to/VT/
+enabled=1
+gpgcheck=0
+
+for rhel6 host:
+# cat /etc/yum.repos.d/rhel.repo 
+[rhel6]
+name=rhel6
+baseurl=http://download.englab.nay.redhat.com/pub/path/to/os/
+enabled=1
+gpgcheck=0
+
+[brewweb] 
+name=brewweb
+baseurl=http://porkchop.devel.redhat.com/brewroot/repos/RHEL-6.6-build/latest/x86_64/
+enabled=1 
+gpgcheck=0
+
+for rhel7 host:
+[rhel7]
+name=rhel7
+baseurl=http://download.englab.nay.redhat.com/pub/rhel/rel-eng/RHEL-7.0-20130502.0/compose/Server/x86_64/os/
+enabled=1
+gpgcheck=0
+
+[brewweb]
+name=brewweb
+baseurl=http://porkchop.devel.redhat.com/brewroot/repos/rhel-7.0-build/latest/x86_64/
+enabled=1
+gpgcheck=0
+
+20.enable guest serial port on host.
+------------------------------------
+1).configure you guest kernel line via append 'console=tty0 console=ttyS0,115200'.
+2).append '-serial unix:/path/to/file,server,nowait' to your qemu-kvm command line.
+3).connect from host through unix socket via 'nc -U /path/to/file'.
+
+21.how to configure host memory core dumps redirection.
+-------------------------------------------------------
+1).install the debuginfo rpm.
+kernel-debuginfo-2.6.32-xxx.el6.x86_64.rpm
+kernel-debuginfo-common-x86_64-2.6.32-xxx.el6.x86_64.rpm
+2).configure core dump format forever appending the following command to the /etc/sysctl.conf.
+# ulimit -c unlimited  //disable the limit for the maximum size of a core dump file.
+# echo "/var/core.%p-%u-%g-%s-%t-%h-%e" > /proc/sys/kernel/core_pattern  //saving core dumps in a specific folder.
+3).# gdb /usr/libexec/qemu-kvm /home/core.%p-%u-%g-%s-%t-%h-%e
+(gdb) bt
+...
+(gdb) q
+
+22.how to configure host kernel/qemu dumps on crash.
+-----------------------------------------------
+1).install the debuginfo rpm.
+kernel-debuginfo-2.6.32-xxx.el6.x86_64.rpm
+kernel-debuginfo-common-x86_64-2.6.32-xxx.el6.x86_64.rpm
+2).# vim /boot/grub/grub.conf
+...crashkernel=128M...
+3).make sure the kdump service is starting:
+# service kdump restart
+4).find if the vmcore exist in your host.
+# file /var/crash/127.0.0.1-2010-09-12-17\:54\:43/vmcore  //depend on your test OS and time
+5).open the vmcore with crash, and run sub-command in crash (log, ps, bt).
+# crash /usr/lib/debug/lib/modules/`uname -r`/vmlinux /var/crash/${path/to/your}vmcore
+(gdb) bt
+...
+(gdb) q
+
+- for qemu-kvm:
+# ls -l /var/core.*
+-rw-------. 1 root root 4783017984 Dec 12 16:27 /var/core.12308-0-0-11-1355300848-localhost.localdomain-qemu-kvm
+# gdb /usr/libexec/qemu-kvm /var/core.12308-0-0-11-1355300848-localhost.localdomain-qemu-kvm
+(gdb) bt
+...
+(gdb) q
+
+23.if do migration on rhel5 ,use the following command.
+-------------------------------------------------------
+(qemu) migrate -d tcp:<dst-host>:<dst-port>,spiceport=<dst-spice-port>,spicehost=<dst-host>  <------- for spice
+(qemu) migrate -d tcp:<dst-host>:<dst-port>  <------- for vnc
+
+24.use git to update RHEL Test Plan.
+------------------------------------
+1).install git.
+# yum install git
+2).config your global identify.
+$ git config --global user.name "your name"
+$ git config --global user.email "xxx@redhat.com"
+which you can check by
+$ git config --list
+3).clone remote repo.
+$ git clone git://qe-git.englab.nay.redhat.com/s2/IEEE-TestPlan
+4).config remote for pushing.
+edit "IEEE-TestPlan/.git/config", and change url of remote as follows:
+[remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git+ssh://git@qe-git.englab.nay.redhat.com/~/repo/virt-qe/IEEE_Test_Plans/KVM
+5).get the latest version.
+$ git pull
+6).stage and commit your changes after editing.
+$ git add IEEE_Test_Plan_of_RHEL6_2_KVM.txt
+$ git commit -m "chp10: add xxx"
+7).push to remote.
+$ git push 
+
+25.boot a guest with a iso and floppy.
+floppy:
+1)...-fda /mnt/virtio-win-1.1.16.vfd
+2)...-drive file=/mnt/virtio-win-1.1.16.vfd,if=none,id=drive-fdc0-0-0,readonly=on,format=raw -global isa-fdc.driveA=drive-fdc0-0-0
+iso:
+...-drive file=/path/to/xxx.iso,if=none,media=cdrom,format=raw,id=drive-ide1-0-1 -device ide-drive,drive=drive-ide1-0-1,id=ide1-0-1,bus=ide.1,unit=1
+
+26.generate kdump by sending a nmi to guest.
+1).boot a guest and inside guest.
+# echo 1 >/proc/sys/kernel/unknown_nmi_panic 
+# echo 1 >/proc/sys/kernel/panic_on_unrecovered_nmi
+2).on QEMU monitor.
+(qemu) nmi 0
+
+27.setup macvtap using eth0 interface. 
+# ip link add link eth0 dev macvtap1 type macvtap / # ip link del link eth0 dev macvtap3 type macvtap
+# ip link set macvtap1 address 22:11:22:45:66:90 up
+# ip link show macvtap1
+64: macvtap1@eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UNKNOWN qlen 500
+    link/ether 22:11:22:45:66:90 brd ff:ff:ff:ff:ff:ff
+get the info of the macvtap.
+# ip link show | grep macvtap  (# killall dhclient  # dhclient eth0 --> let eth0 get ip addresss.)
+64: macvtap1@eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UNKNOWN qlen 500
+# /usr/libexec/qemu-kvm ...-netdev tap,id=hostnet0,vhost=on/off,fd=76 76<>/dev/tap76 -device virtio-net-pci,netdev=hostnet0,id=virtio-net-pci0,mac=22:11:22:45:66:90...
+#### the number 76 from the "ip link show | grep macvtap"
+#### the mac addr of guest nic should exactly same as macvtap
+How to remove host eth0's ip.
+# ifconfig eth0 0.0.0.0 up
+
+28. enable S3/4 for Windows.
+# powercfg -h on
+Winxp/2k3/win7: Click "Start" button and select "Hibernate/sleep" in the menu.
+Win2k8: Control Panel -> Power Option -> "Choose what the power button does" -> Select "Hibernate/sleep" ->  Click "Save Changes" button.
+
+29.To see every process on the system using BSD syntax:
+# ps axu | grep qemu-kvm
+To get info about threads:
+# ps -eLf | grep qemu-kvm
+
+30.lftp is a file transfer program that allows sophisticated ftp, http and other connections to other hosts.
+# lftp -c "pget -n 10 xxxx"
+
+31.3/s4 is disable by defualt, need specify in qemu-kvm commandline:
+...-global PIIX4_PM.disable_s3=0 -global PIIX4_PM.disable_s4=0 
+
+32.send message for us.
+<sluo> .say @kvmqe  hi all... balabala.
+
+33.firewall the iSCSI port instead of stopping/restarting the server itself.
+# iscsiadm --mode discovery --type sendtargets --portal 10.66.6.78 –discover
+# iscsiadm -m node -T test4 -p 10.66.6.78 -l
+Logging in to [iface: default, target: test4, portal: 10.66.6.78,3260] (multiple)
+Login to [iface: default, target: test4, portal: 10.66.6.78,3260] successful.
+# iptables -A INPUT -p tcp -s 10.66.6.78 --dport 3260 -j DROP / # iptables -I INPUT -i eth0 -p tcp --dport 3260 -j DROP iptables -I OUTPUT -o eth0 -p tcp --sport 3260 -j DROP
+# iptables -A OUTPUT -p tcp -d 10.66.90.0/24 --dport 3260 -j DROP
+# netstat -ant
+# telnet localhost $port
+# iptables -F / # service iptables stop
+
+34.configure the ipv6.
+# ip addr add 2002:5::11/64 dev eth0 (breth0/switch)
+//# ip addr flush eth0
+# service ip6tables stop
+configure another 2002:5::12/64 in another host, and try to ping each other with "ping6" command.
+e.g:
+1).configure ipv6:
+# cat /etc/sysconfig/network-scripts/ifcfg-xx
+...
+IPV6INIT=yes
+IPV6AUTOCONF=yes
+IPV6ADDR=2001::5
+# cat /etc/hosts
+...
+2001::10 xxxx
+2).http server configure:
+# cat /etc/sysconfig/network
+NETWORKING=yes
+NETWORKING_IPV6=yes
+HOSTNAME=xxxx
+# service httpd start
+3).create a big file under /var/www/html/$folder/$big_file
+http://$hostname/$folder/ to guest the $big_file
+4).if want to use wget to download it:
+# cat /etc/wgetrc
+...
+# To try ipv6 addresses first:
+prefer-family = IPv6
+...
+# wget  http://$hostname/$folder/$big_file
+
+35.start guest w/ 1 virtio-serial-pci & 2 virtio-serial-port.
+...-device virtio-serial-pci,id=virtio-serial0,max_ports=16,bus=pci.0,addr=0x3 -chardev socket,id=channel1,path=/tmp/helloworld1,server,nowait -device virtserialport,chardev=channel1,name=com.redhat.rhevm.vdsm,bus=virtio-serial0.0,id=port1 -chardev socket,id=channel2,path=/tmp/helloworld2,server,nowait -device virtserialport,chardev=channel2,name=com.redhat.rhevm.vdsm,bus=virtio-serial0.0,id=port2
+
+36.intall guest via following ways.
+ physical cd-rom (-cdrom /dev/sr0).
+ virtual cd-rom(-cdrom /path/to/isofile).
+ iso file(-boot d -drive=/path/to/isofile,media=cdrom...).
+ kernel image(-kernel /home/vmlinuz -initrd /home/initrd.img -append method=http://path/to/os).
+ gPXE/etherboot(-boot n -net nic,model=rtl8139/e1000/virtio) with three types of nic model.
+# vim grub/grub.conf 
+...
+default=0
+timeout=5
+splashimage=(hd0,0)/grub/splash.xpm.gz
+hiddenmenu
+title sluo
+        root (hd0,0)
+        kernel /vmlinuz vnc vncconnect=dhcp headless ip=dhcp ksdevice=eth0 method=http://tree.englab.nay.redhat.com/pub/rhel/rel-eng/RHEL6.3/RHEL6.3-20120516.0/x86_64/os/
+        initrd /initrd.img
+...
+
+37.save guest memory dump.
+(qemu) memsave addrsizefilename
+Saves virtual memory dump starting at 'addr' of 'size' size to file filename. "val": the starting address (json-int), "size": the memory size, in bytes (json-int), "filename": file path (json-string).
+(qemu) pmemsave addrsizefilename
+Saves physical memory dump starting at 'addr' of 'size' size to file filename-x.
+
+38.dump guest memory to file with HMP and QMP monitor, and analyze the kernel state with crash and see if it matches the real guest state.
+(qemu) dump-guest-memory -p /path/to/guest-memory
+->{"execute":"qmp_capabilities"}
+-<{"return": {}}
+-> {"execute":"dump-guest-memory","arguments":{"paging":true | false,"protocol":"file:/path/to/guest-memory"}}
+<- {"timestamp": {"seconds": 1350286411, "microseconds": 675944}, "event": "STOP"}
+<- {"timestamp": {"seconds": 1350286418, "microseconds": 158967}, "event": "RESUME"}
+<- {"return": {}}
+NOTE: we have to set paging=true for gdb dump tools and paging=false for crash dump tools.
+# crash /usr/lib/debug/lib/modules/`uname -r`/vmlinux /tmp/guest-memory
+# gdb /usr/lib/debug/lib/modules/`uname -r`/vmlinux /tmp/guest-memory
+
+39.To capture all usb-redir logging you can add '2> log' to the end of the qemu cmdline, ie:
+qemu ...   2> /tmp/sluo.log
+and
+qemu ... -incoming ... 2> /tmp/sluo.log
+The full qemu logs of the src and the destination, preferably with a spice debug messages (export SPICE_DEBUG_LEVEL=5).
+
+40.rpm2cpio - Extract cpio archive from RPM Package Manager (RPM) package.
+# rpm2cpio qemu-kvm-0.12.1.2-2.337.el6.src.rpm | cpio -div
+# tar xvf qemu-kvm-0.12.1.2.tar.gz
+
+rpmbuild the src to rpm:
+# rpm -ivh qemu-kvm-0.12.1.2-2.369.el6.src.rpm
+# rpmbuild -ba /root/rpmbuild/SPECS/qemu-kvm.spec
+# ls -lh /root/rpmbuild/RPMS/x86_64/*
+total 14M
+-rw-r--r--. 1 root root 512K May 12 17:39 qemu-guest-agent-0.12.1.2-2.369.el6.x86_64.rpm
+-rw-r--r--. 1 root root 485K May 12 17:39 qemu-guest-agent-win32-0.12.1.2-2.369.el6.x86_64.rpm
+-rw-r--r--. 1 root root 1.5M May 12 17:39 qemu-img-0.12.1.2-2.369.el6.x86_64.rpm
+-rw-r--r--. 1 root root  11M May 12 17:39 qemu-kvm-0.12.1.2-2.369.el6.x86_64.rpm
+-rw-r--r--. 1 root root 317K May 12 17:39 qemu-kvm-tools-0.12.1.2-2.369.el6.x86_64.rpm
+
+41.the qemu of rhel code.
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel6/qemu-kvm.git
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel7/qemu-kvm.git
+
+42.how to extract all files from 'archive.tar.xz'.
+$ xz -d archive.tar.xz
+$ tar -xvf  archive.tar
+# xz -d virtio-blk-data-plane-rpms.tar.xz
+# tar -xvf virtio-blk-data-plane-rpms.tar
+
+# tar -zcvf /tmp/path.tar.gz /tmp/path/xxx
+# tar -zxvf /tmp/path.tar.gz
+43.iostat - Report Central Processing Unit (CPU) statistics and input/output statistics for devices, partitions and network filesystems (NFS).
+e.g.# iostat -x hda hdb 2 6 //display six reports of extended statistics at two second intervals for devices hda and hdb.
+
+44.dmidecode - it is a tool for dumping a computer’s DMI (some say SMBIOS) table contents in a human-readable format.
+
+45.using hdparm - Intro
+query the drive to see what type of block size it has.
+# hdparm -I /dev/sda |grep size
+	Logical/Physical Sector size:           512 bytes
+	device size with M = 1024*1024:      476940 MBytes
+	device size with M = 1000*1000:      500107 MBytes (500 GB)
+	cache/buffer size  = 14111 KBytes (type=DualPortCache)
+Using hdparm - Getting Info:
+# hdparm -i /dev/hdb
+Using hdparm - Speed Test:
+# hdparm -Tt /dev/hdb
+
+46.kvm-qe-weekly report git repo and related configuration:
+1) Clone the repo:
+  git clone git://qe-git.englab.nay.redhat.com/virt-qe-weekly-report
+2) Update pushurl in .git/config file as below:
+... ...
+[remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git://qe-git.englab.nay.redhat.com/virt-qe-weekly-report
+        pushurl = ssh://git@qe-git.englab.nay.redhat.com/home/git/repo/virt-qe-weekly-report
+... ...
+3) Update the default name and email:
+    git config --global user.name "Your Name"
+    git config --global user.email you@example.com
+$ cat .git/config 
+[core]
+ repositoryformatversion = 0
+ filemode = true
+ bare = false
+ logallrefupdates = true
+[remote "origin"]
+        fetch = +refs/heads/*:refs/remotes/origin/*
+        url = git://qe-git.englab.nay.redhat.com/virt-qe-weekly-report
+        pushurl = ssh://git@qe-git.englab.nay.redhat.com/home/git/repo/virt-qe-weekly-report
+[branch "master"]
+ remote = origin
+ merge = refs/heads/master
+
+47.performance auto script: # git clone git://qe-git.englab.nay.redhat.com/performance
+
+48.install the desktop.
+# yum install *desktop* xorg-x11* *gnome* *Xorg* 
+
+49.ich9-ahci,ICH9 device.
+dev: ich9-ahci, id ""
+   bus: ide.5
+   bus: ide.4
+   bus: ide.3
+   bus: ide.2
+   bus: ide.1
+   bus: ide.0
+dev: ICH9 SMB, id ""
+   dev: ich9-usb-uhci3, id ""
+   dev: ich9-usb-uhci2, id ""
+   dev: ich9-usb-uhci1, id ""
+   dev: ich9-usb-ehci1, id ""
+companions: usb-ehci + ich9-usb-uhci1
+dev: usb-uhci, usb-ehci, usb-hub, nec-usb-xhci
+
+50.setcap CAP_SYS_RAWIO to qemu-kvm
+- without CAP_SYS_RAWIO:
+# getcap  /usr/bin/sg_persist
+- with CAP_SYS_RAWIO:
+# setcap cap_sys_rawio=ep /usr/bin/sg_persist
+# getcap  /usr/bin/sg_persist
+  /usr/bin/sg_persist = cap_sys_rawio+ep
+# setcap cap_sys_rawio=ep /usr/libexec/qemu-kvm
+# getcap /usr/libexec/qemu-kvm
+  /usr/libexec/qemu-kvm = cap_sys_rawio+ep
+# sudo -u $user /usr/libexec/qemu-kvm...
+
+51.how to solve 'error while loading shared libraries: libsasl2.so.2'.
+# /usr/libexec/qemu-kvm -vnc :1 -stdio monitor
+/usr/libexec/qemu-kvm: error while loading shared libraries: libsasl2.so.2: cannot open shared object file: No such file or directory 
+- Resolving:
+# yum -y install cyrus-sasl*
+# whereis libsasl2
+libsasl2: /usr/lib64/libsasl2.so
+# cp /usr/lib64/libsasl2.so /usr/lib64/libsasl2.so.2 OR # ln -s /usr/lib64/libsasl2.so.2 /usr/lib64/libsasl2.so
+# ls -l /usr/lib64/libsasl2*
+lrwxrwxrwx. 1 root root     24 May  2 19:53 /usr/lib64/libsasl2.so.2 -> /lib64/libsasl2.so.3.0.0
+lrwxrwxrwx. 1 root root     17 May  2 18:50 /usr/lib64/libsasl2.so.3 -> libsasl2.so.3.0.0
+-rwxr-xr-x. 1 root root 122840 Apr 18 22:52 /usr/lib64/libsasl2.so.3.0.0
+
+52.# numactl --physcpubind=+8-15 --cpunodebind=1 /usr/libexec/qemu-kvm...
+# taskset -cp $cpu-list $pid_qemu
+pid $pid's current affinity list: xxx 
+pid $pid's new affinity list: $cpu-list
+# cat /proc/3776/task/`pidof qemu-kvm`/status | grep Cpus_allowed_list
+
+53.How Do I Find The Hardware Block Read Size for My Hard Drive.
+# hdparm -I /dev/sda | grep -i physical
+   Logical/Physical Sector size:           512 bytes
+
+54.Warning: user mockbuild does not exist: using root
+The ‘mock’ module is responsible to build the source RPMs (SRPMs) under a chroot environment and uses the ‘mockbuild’ user. If the mockbuild user does not exist while installing the source RPM, you will receive the ‘Warning: user mockbuild does not exist. using root‘ error message.
+In order to fix the warning message, install the ‘mock’ module:
+# yum install mock
+and create the ‘mockbuild’ user
+# useradd -s /sbin/nologin mockbuild
+Once done, you should be able to install the required tool under the mockbuild user.
+
+55.How to create RHEL ISO images using Jigdo.
+(1).you need to install the jigdo package. It is available in Fedora and EPEL.
+# yum install jigdo
+(2).enter the jigdo directory of the RHEL tree whose ISO image you wish to create.
+e.g: the latest RHEL 7 Workstation rel-eng tree has such a directory in the Brno office here:
+http://download.englab.brq.redhat.com/pub/rhel/rel-eng/latest-RHEL-7/compose/Workstation/x86_64/jigdo/
+Download both the .jigdo and the .template file; you might want to store them in an appropriate directory because Jigdo will eventually create the ISO image there. 
+# mkdir /home/jigdo
+# cd /home/jigdo
+# wget RHEL-7.0-20130606.0-Workstation-x86_64-dvd1.iso.jigdo RHEL-7.0-20130606.0-Workstation-x86_64-dvd1.iso.template
+(3).Now you have to edit the .jigdo file and add a section called [Servers] containing the URL of the RHEL tree in question. The format is as follows:
+[Servers]
+A=<URL>
+e.g:
+[Servers]
+A=http://download.englab.brq.redhat.com/pub/rhel/rel-eng/latest-RHEL-7/compose/Workstation/x86_64/os/
+(4).have Jigdo-lite download all the files that constitute the ISO image and create the .iso file. Make sure you are in the directory where the Jigdo files are stored: 
+# jigdo-lite *.jigdo
+Replace *.jigdo with the exact name of the .jigdo file if need be. e.g:# jigdo-lite RHEL-7.0-20130606.0-Workstation-x86_64-dvd1.iso.jigdo
+(5).When Jigdo-lite is finished, an ISO file, whose exact name is specified in the .jigdo file, is created.
+
+56.Profile maintain guide.
+https://redmine.englab.nay.redhat.com/projects/serverkeyinfo/wiki/Profile_maintain_guide
+1).Clone the systems dir from git server to local dir.
+# git clone git@qe-git.englab.nay.redhat.com:~/repo/virt-qe/repo
+repo
+  |-- distros
+  |-- kickstarts
+   `-- profiles
+2).Add distros firstly, we use RHEL6-Server-x86-20100715.2 as an example.
+# cd repo/distros
+# vim RHEL7u0-Server-x64-20130606.0.distro
+# git add RHEL7u0-Server-x64-20130606.0.distro
+3).Add the kickstart files into the kvm directory.
+# cd repo/kickstarts/kvm/RHEL7/
+Locate the ks-sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18.cfg file in this diretory.
+# git add ks-sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18.cfg
+4).Add the profile file.
+# cd repo/profiles
+# vim sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18.profile
+[General]
+distro = RHEL7u0-Server-x64-20130606.0
+kickstart = kvm/RHEL7/ks-sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18.cfg
+# git add sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18.profile
+5).Commit the files into git server.
+# cd repo
+# git commit -a -m "Add the profile ks-sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18"
+# git push
+6).Wait nearly two minutes, this profile will add into the cobbler, Debug from the log.
+# wget http://pxe.englab.nay.redhat.com/log/profilebot.log
+# wget http://pxe.englab.nay.redhat.com/log/profilebot_update.log
+7).Disable the profile from the pxe menu.
+# echo "enable_menu = False" >> sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18.profile
+# git commit -a -m "Disable this profile sluo-RHEL-7.0-20130606.0-kernel-3.10.0-0.rc4.59-qemu-kvm-1.5.0-2.el7.x86_64-menual-Jun18" 
+# git push
+
+57.RHEL uses two separate methods for controlling KSM.
+The ksm service starts and stops the KSM kernel thread.
+The ksmtuned service controls and tunes the ksm, dynamically managing same-page merging. The ksmtuned service starts ksm and stops the ksm service if memory sharing is not necessary. The ksmtuned service must be told with the retune parameter to run when new guests are created or destroyed.
+When the ksm service is not started, KSM shares only 2000 pages. This default is low and provides limited memory saving benefits.
+When the ksm service is started, KSM will share up to half of the host system's main memory. Start the ksm service to enable KSM to share more memory.
+# service ksm start
+Starting ksm:                                              [  OK  ]
+# chkconfig ksm on
+# service ksmtuned start
+Starting ksmtuned:                                         [  OK  ]
+# chkconfig ksmtuned on
+Deactivating KSM.
+# service ksmtuned stop
+Stopping ksmtuned:                                         [  OK  ]
+# service ksm stop
+Stopping ksm:                                              [  OK  ]
+# chkconfig ksm off
+# chkconfig ksmtuned off
+
+58.SELinux
+# setenforce 0|1
+# getenforce
+# yum -y install  setroubleshoot-server
+# setroubleshootd //starting setroubleshoot server
+# tailf /var/log/message
+
+59.Q35 & pci birdge.
+/usr/libexec/qemu-kvm -M q35 -device pci-bridge,bus=pcie.0,id=bridge1,chassis_nr=1,addr=0x3...-device ich9-usb-uhci1,id=usb1,bus=bridge1,addr=0x1
+
+60.Q35 & switch.
+/usr/libexec/qemu-kvm -M q35 -device ioh3420,bus=pcie.0,id=root.0 -device x3130-upstream,bus=root.0,id=upstream -device xio3130-downstream,bus=upstream,id=downstream0,chassis=1...-device xxxxx,bus=downstream0,id=usb_controller
+
+61.the switch behind switch.
+e.g:...-device ioh3420,bus=pcie.0,id=root.0,slot=1 -device x3130-upstream,bus=root.0,id=upstream0 -device xio3130-downstream,bus=upstream0,id=downstream0,chassis=1 -drive file=/home/RHEL-7.0-20130628.0-Server-x86_64.qcow3,if=none,id=drive-system-disk,format=qcow2,cache=none,aio=native,werror=stop,rerror=stop,serial="QEMU-DISK1" -device virtio-blk-pci,bus=downstream0,addr=0x0,drive=drive-system-disk,id=system-disk,bootindex=1
+
+62.rhel7 and fedora run in runlevel 3 or 5.
+multi-user.target: analogous to runlevel 3
+# ln -sf /lib/systemd/system/multi-user.target /etc/systemd/system/default.target
+graphical.target: analogous to runlevel 5
+# ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target
+
+63.# qemu-img create -f qcow2 -o compat=1.1 $image_name $size 
+# python /root/qemu/tests/qemu-iotests/qcow2.py sluo.qcow3 dump-header
+magic                     0x514649fb
+version                   3                     <----------------qcow3
+
+64.hexdump — display file contents in ascii, decimal, hexadecimal, or octal
+# dd if=/dev/urandom of=/home/sluo bs=1M count=1000
+# hexdump /home/sluo
+
+65.use the console to print host kernel log.
+-host A:
+ append 'console=tty0 console=ttyS0,115200' to kernel.
+-host B:
+ install minicom-2.6.2-2.el7.x86_64 RPM.
+ # minicom -s //configure the minicom.
+  configuration:+----Serial port setup+--->A - Serial Device         : /dev/ttyS0
+                |                     |
+                |                     +--->F - Hardware Flow Control : No
+                +----Save setup as dfl---->save
+host A kernel log----->host B.
+
+66.compile the qemu-kvm by myself.
+glib-2.0 required to compile QEMU----> install glib2&glib2-devel
+Error: libpci header check failed----> install pciutils&pciutils-devel
+
+67.whql team samba server.
+ip_addr:10.66.73.47
+user:   virtio\virtioadmin
+passwd: Assentor01
+
+68.kvm-unit-tests.
+# git clone git://git.kernel.org/pub/scm/virt/kvm/kvm-unit-tests.git
+# kvm-unit-test ] ./configure & make
+
+69.remote of chayang's windows host.
+# rdesktop -g 1536x1024 10.66.9.65 -u wdclient -p ca\$hc0w
+
+70.disable/enable the firewall in windows via cmd.
+# netsh firewall set opmode mode=enable
+# netsh firewall set opmode mode=disable
+
+71.use WDS server to install all the windows guests.
+# showmount -e 10.66.90.128
+Export list for 10.66.90.128:
+    /vol/S2/kvmauto/fileshare-kvm/pub/auto_rsc/whql 10.66.9.19
+    /vol/S4/images                                  (everyone)
+...
+# mount 10.66.90.128:/vol/S4/images/ /mnt/
+# ls /mnt/
+WDS  WDS_V2
+# ls -lh /mnt/WDS_V2
+total 65G
+-rw-r--r--. 1 root root 48G Apr 15  2011 storage.img
+-rw-------. 1 root root 98G Apr 15  2011 Windows_WDS.img
+Copy two images from WDS_V2 to your test box, then boot it as a guest.
+e.g:... -drive file=Windows_WDS.img...,format=raw,bootindex=0 -device ide-drive,... -drive file=storage.img,format=raw... -device ...
+NOTE: need to use the private network, and need to restart the WDS services after configuration.
+username: WDS\Administrator password: 123qweP
+Test Results:
+|guest        |installation status|comments                     |
+|Win2008r2    |       100%        |DataCenter(Full installation)|
+|Win2003      |       100%        |32bit                        |
+|Win-Vista    |       100%        |32bit                        |
+|Winxp        |       100%        |32bit                        |
+
+72.VMware-Workstation-9.0.0-812388.x86_64.bundle
+serial number: 412CL-T5L9N-J870A-CKAKK-20W5H
+Hyper-V:
+# rdesktop -g 1536x1024 10.66.106.45 -u RHEVH\\vdcadmin -p 123qweP
+# rdesktop -g 1536x1024 10.66.65.84 -u RHEVH\\vdcadmin -p 123qweP
+10.66.10.95
+ftp server: 10.66.8.101 lijing/jing850930
+
+73.linux floating point (BZ#952252)(e.g: fbench http://www.fourmilab.ch/fbench/fbench.html)
+
+74.The  command  brctl  addbr <name> creates a new instance of the ethernet bridge. The network interface corresponding to the bridge will be called <name>.
+The command brctl delbr <name> deletes the instance <name> of the ethernet bridge. The network  interface corresponding to the bridge must be down before it can be deleted!
+The command brctl show shows all current instances of the ethernet bridge.
+
+example:
+brctl addbr switch
+ifconfig switch up
+dhclient switch
+ip link set switch address 00:22:19:30:22:e3 up
+
+75.Turning on debug logs for libvirtd.
+http://wiki.libvirt.org/page/DebugLogs
+1).open /etc/libvirt/libvirtd.conf in your favourite editor
+2).find & replace, or set these variables: 
+ log_level = 1
+ log_filters="3:remote 4:event 3:json 3:rpc" | log_filters="1:qemu_monitor_json"
+ log_outputs="1:file:/var/log/libvirt/libvirtd.log"
+3).save and exit
+4).restart libvirtd service 
+# systemctl restart libvirtd.service
+
+76.qemu-iotests test suite.
+# rpm -ivh qemu-kvm-1.5.3-59.el7.src.rpm
+# cd /root/rpmbuild/SPECS/
+# rpmbuild -bp --nodeps qemu-kvm.spec
+# export QEMU_PROG=/usr/libexec/qemu-kvm
+# cd /root/rpmbuild/BUILD/qemu-1.5.3/tests/qemu-iotests
+# ./check -qcow2|qed|vhdx|vmdk|raw
+
+# git clone git://git.app.eng.bos.redhat.com/virt/rhel7/qemu-kvm.git
+# git branch -a
+# git branch qemu-kvm-rhev7.1 origin/rhev7/master-2.1.2
+# git checkout qemu-kvm-rhev7.1; git pull
+# git branch -v
+# ./configure --target-list=x86_64-softmmu; make
+go to /home/qemu-kvm/tests/qemu-iotests directory.
+# export QEMU_PROG=/usr/libexec/qemu-kvm
+# ./check -qcow2|vmdk|vhdx|raw|qed|vpc|vdi...
+
+77.It collects necessary data about the crash, generates a report with all information and based on user interaction sends it to some bug reporting system.
+# yum install abrt-desktop,abrt-cli -y
+# service abrtd start
+# pkill -ABRT -f 'qemu-kvm'
+
+78.How to dump the seabios log via chardev.
+e.g:...-chardev socket,id=seabioslog_sluo,path=/tmp/seabioslog_sluo,server,nowait -device isa-debugcon,chardev=seabioslog_sluo,iobase=0x402
+# nc -U /tmp/seabios-20140422-110452-289U9AwN 
+Start bios (version seabios-1.7.2.2-12.el7)
+...
+
+79.VMWare Tools Installation Repos:
+http://packages.vmware.com/tools/esx/index.html
+http://wiki.nikoforge.org/VMWare_Tools_Installation_on_CentOS
+
+80.Hyper-V manager for S1.
+# rdesktop -g 1536x1024 10.66.109.104 -u hyperv\\vdcadmin -p 123qweP
+Use ftp server(sluo: 10.66.12.139) to download/upload the image or use scp via pscp.exe tool.
+
+81.Esxi5.1 environment for S3.
+ip_addr: 10.66.71.84, user: root, password: 123qweP
+
+82.prepare a ramdisk.
+- for rhel7:
+# modprobe brd rd_size=4194304
+# ls /dev/ram*
+/dev/ram0  /dev/ram10  /dev/ram12  /dev/ram14  /dev/ram2  /dev/ram4  /dev/ram6  /dev/ram8
+/dev/ram1  /dev/ram11  /dev/ram13  /dev/ram15  /dev/ram3  /dev/ram5  /dev/ram7  /dev/ram9
+- for rhel6:
+append 'ramdisk_size=4194304' to the /boot/grub/grub.conf kernel line and reboot host.
+
+83.FIO tools, http://pkgs.repoforge.org/fio/
+# fio -filename /dev/vda -direct=1 -iodepth=1 -thread -rw=write -ioengine=psync -bs=64k -size=30G -numjobs=1 -name=mytest
+
+84.SCSI addressing.
+Linux has a four level hierarchical addressing scheme for SCSI devices: [host]:[bus]:[target]:[lun]
+PCI: /dev/disk/by-path/pci####:##:##.#  <feild number>:<bus number>:<slot number>.<function number>
+SCSI:/dev/disk/by-path/pci-0000:00:1f.2-scsi-2:0:0:0 <host>:<channel>:<id>:<lun>
+SCSI adapter number [host]
+channel number [bus]
+id number [target]
+lun [lun]
+e.g:...-drive file=/path/to/image,if=none,id=drive-system-disk,format=qcow2,cache=none,aio=native,werror=stop,rerror=stop -device virtio-scsi-pci,bus=pci.0,addr=0x4,id=scsi0 -device scsi-hd,drive=drive-system-disk,id=system-disk,bus=scsi0.0,*channel*=0,*scsi-id*=1,*lun*=0,bootindex=1
+Max number: 30(slot/controller number) * 8(multifunction) * 1(channel=0) * 256(target number) * 16384(lun number)
+
+http://www.tldp.org/HOWTO/SCSI-2.4-HOWTO/scsiaddr.html
+
+85. How to create partition primary and assign letter to a disk in windows.
+CMD> diskpart
+CMD> select disk 1
+CMD> create partition
+CMD> assign letter=E
+
+86.how to setup a nbd server.
+(1).export a image with absolute path on the NBD server host.
+# nbd-server 12345 /home/my-data-disk.qcow2
+(2).launch a KVM guest with the nbd storage backends.
+e.g:...-drive file=nbd:10.66.11.154:12345,if,if=none,id=drive-data-disk,format=qcow2,cache=none,aio=native,werror=stop,rerror=stop -device virtio-blk-pci,drive=drive-data-disk,id=data-disk,config-wce=off,x-data-plane=on,bus=pci.0,addr=0x7
+
+87.how to modify the kernel boot version.
+#cat /boot/grub2/grub.cfg | grep menuentry
+...
+menuentry 'Red Hat Enterprise Linux Server (3.10.0-217.el7.x86_64) 7.1 (Maipo)'
+...
+#grub2-set-default "Red Hat Enterprise Linux Server (3.10.0-217.el7.x86_64) 7.1 (Maipo)"
+#grub2-editenv list
+saved_entry=Red Hat Enterprise Linux Server (3.10.0-217.el7.x86_64) 7.1 (Maipo)
+#grub2-mkconfig -o /boot/grub2/grub.cfg
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-3.10.0-217.el7.x86_64
+Found initrd image: /boot/initramfs-3.10.0-217.el7.x86_64.img
+Found linux image: /boot/vmlinuz-3.10.0-210.el7.x86_64
+Found initrd image: /boot/initramfs-3.10.0-210.el7.x86_64.img
+Found linux image: /boot/vmlinuz-0-rescue-072bad01a6e64fdfb1fe8c330b7df174
+Found initrd image: /boot/initramfs-0-rescue-072bad01a6e64fdfb1fe8c330b7df174.img
+Found Red Hat Enterprise Linux Server release 7.1 Beta (Maipo) on /dev/mapper/rhel_unused-root
+done
+
+88.query the changing log information for the package.
+# rpm -q --changelog qemu-kvm-1.5.3-86.el7.x86_64 | grep bz#1002493
+- kvm-qemu-iotests-Test-case-for-backing-file-deletion.patch [bz#1002493]
+- kvm-qemu-iotests-Introduce-_unsupported_imgopts.patch [bz#1002493]
+- kvm-qemu-iotests-Add-_unsupported_imgopts-for-vmdk-subfo.patch [bz#1002493]
+- kvm-qemu-iotests-Don-t-run-005-on-vmdk-split-formats.patch [bz#1002493]
+- kvm-fpu-softfloat-drop-INLINE-macro.patch [bz#1002493]
+- kvm-block-New-bdrv_nb_sectors.patch [bz#1002493]
+- kvm-vmdk-Optimize-cluster-allocation.patch [bz#1002493]
+- kvm-vmdk-Handle-failure-for-potentially-large-allocation.patch [bz#1002493]
+- kvm-vmdk-Use-bdrv_nb_sectors-where-sectors-not-bytes-are.patch [bz#1002493]
+- kvm-vmdk-fix-vmdk_parse_extents-extent_file-leaks.patch [bz#1002493]
+- kvm-vmdk-fix-buf-leak-in-vmdk_parse_extents.patch [bz#1002493]
+- kvm-vmdk-Fix-integer-overflow-in-offset-calculation.patch [bz#1002493]
+- Resolves: bz#1002493
+
+89.attach the following message to the /etc/profile configure.
+ulimit -c unlimited
+echo "/var/core.%p-%u-%g-%s-%t-%h-%e" > /proc/sys/kernel/core_pattern

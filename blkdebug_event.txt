@@ -1,0 +1,61 @@
+====================blkdebug event====================
+
+Block drivers can trigger a blkdebug event whenever they reach a place where it could be useful to inject an error for testing/debugging purposes.
+
+Rules are read from a blkdebug config file and describe which action is taken when an event is triggered. For now this is only injecting an error (with a few options) or changing the state (which is an integer). Rules can be declared to be active only in a specific state; this way later rules can distiguish on which path we came to trigger their event.
+
+qemu-io> help write
+write [-abCpq] [-P pattern ] off len -- writes a number of bytes at a specified offset
+
+ writes a range of bytes from the given offset
+
+ Example:
+ 'write 512 1k' - writes 1 kilobyte at 512 bytes into the open file
+
+ Writes into a segment of the currently open file, using a buffer
+ filled with a set pattern (0xcdcdcdcd).
+ -b, -- write to the VM state rather than the virtual disk
+ -p, -- use bdrv_pwrite to write the file
+ -P, -- use different pattern to fill file
+ -C, -- report statistics in a machine parsable format
+ -q, -- quite mode, do not show I/O statistics
+
+qemu-io> help read
+read [-abCpqv] [-P pattern [-s off] [-l len]] off len -- reads a number of bytes at a specified offset
+
+ reads a range of bytes from the given offset
+
+ Example:
+ 'read -v 512 1k' - dumps 1 kilobyte read from 512 bytes into the file
+
+ Reads a segment of the currently open file, optionally dumping it to the
+ standard output stream (with -v option) for subsequent inspection.
+ -b, -- read from the VM state rather than the virtual disk
+ -C, -- report statistics in a machine parsable format
+ -l, -- length for pattern verification (only with -P)
+ -p, -- use bdrv_pread to read the file
+ -P, -- use a pattern to verify read data
+ -q, -- quite mode, do not show I/O statistics
+ -s, -- start offset for pattern verification (only with -P)
+ -v, -- dump buffer to standard output
+
+http://lists.gnu.org/archive/html/qemu-devel/2010-03/msg02336.html
+
+To be sure that it was blkdebug which caused the error message you can either try the same without blkdebug (qemu-io tmp.qcow2) or change the errno in the configuration and see if a different error message appears.
+
+# qemu-io /tmp/tmp.qcow2
+qemu-io> write 0 4k
+wrote 4096/4096 bytes at offset 0
+4 KiB, 1 ops; 0.0000 sec (22.987 KiB/sec and 5.7468 ops/sec)
+
+# qemu-io blkdebug:/tmp/blkdebug.cfg:/tmp/tmp.qcow2 
+qemu-io> write 0 4k
+write failed: Input/output error
+
+Change from errno = "5" to errno = "3" in the blkdebug.cfg
+# qemu-io blkdebug:/tmp/blkdebug.cfg:/tmp/tmp.qcow2
+qemu-io> write 0 4k
+write failed: No such process
+
+
+

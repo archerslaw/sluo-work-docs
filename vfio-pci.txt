@@ -1,0 +1,21 @@
+How to use:
+1. Check if VT-d in BIOS is turned on for Intel, AMD-Vi for amd
+2. Add intel_iommu=on/amd_iommu=on to kernel line, separately
+3. Load vfio-pci, vfio, vfio_iommu_type1 modules
+4. Currently, for Intel VT-d1 system and AMD system without interrupt remapping support, allow_unsafe_interrupts should be enabled by:
+   # echo 1 > /sys/module/vfio_iommu_type1/parameters/allow_unsafe_interrupts
+5. Assume user wants to access PCI device 0000:06:00.0. Check which IOMMU group this PF is in by:
+   # readlink /sys/bus/pci/devices/0000:06:00.0/iommu_group
+6. Unbind this PF from host driver and bind it to vfio-pci:
+   # echo "8086 10fb" > /sys/bus/pci/drivers/vfio-pci/new_id 
+   # echo 0000:06:00.0 > /sys/bus/pci/devices/0000\:06\:00.0/driver/unbind
+   # echo 0000:06:00.0 > /sys/bus/pci/drivers/vfio-pci/bind
+7. Check what other devices are in the same group as PF mentioned above, unbind all of them and bind to vfio-pci:
+   # ls -l /sys/bus/pci/devices/0000:06:00.0/iommu_group/devices
+8. Launch a guest by assigning PF:
+   /usr/libexec/qemu-kvm ... -device vfio-pci,host=06:00.0,id=pf
+9. Bind back to its initial driver:
+   # echo "8086 10fb" > /sys/bus/pci/drivers/ixgbe/new_id 
+   # echo 0000:06:00.0 > /sys/bus/pci/drivers/vfio-pci/unbind
+   # echo 0000:06:00.0 > /sys/bus/pci/drivers/ixgbe/bind
+

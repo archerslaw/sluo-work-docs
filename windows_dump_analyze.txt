@@ -1,0 +1,67 @@
+1. Make sure that the memory was dumped. To configure it (in XP, in W2K it's similar):
+
+   1.Start -> Control Panel -> System -> Advanced -> 'Startup and Recovery - click on the 'Settings' button
+   2. Make sure under 'System failure' 'Automatically restart' is NOT checked; 'Write debugging information' should be set to 'Complete memory dump'. You may need to restart the OS. 
+
+2. After a BSOD occurred, wait until it is completely written before rebooting the OS.
+
+3. After the OS completed booting, you can look at the memory dump (usually, under %SystemRoot%\memory.dmp - which is usually c:\windows\memory.dmp), using the Debugging Tools for Windows (latest is dbg_x86_6.10.3.233.msi ). Note! If you use it on 64bit OS, you need the amd64 version - dbg_amd64_6.10.3.233.msi)
+Download url:
+http://msdl.microsoft.com/download/symbols/debuggers/dbg_x86_6.10.3.233.msi
+http://msdl.microsoft.com/download/symbols/debuggers/dbg_ia64_6.10.3.233.msi
+http://msdl.microsoft.com/download/symbols/debuggers/dbg_amd64_6.10.3.233.msi
+
+
+4. Open WindDbg (Start->All Programs->Debugging Tools for Windows ->WinDbg), go to File->Symbol File Path and enter: SRV*http://msdl.microsoft.com/download/symbols
+
+If you have your own symbols as well, use: srv*c:\symbols*http://msdn.microsoft.com/download/symbols
+
+5. Open the crash dump using File->Open Crash Dump
+
+6. Run the command '!analyze -v' (this may take a while).
+
+Copy the whole output - it may be relevant. 
+
+
+
+
+Complete memory dump
+A complete memory dump records all the contents of system memory when your computer stops unexpectedly. A complete memory dump may contain data from processes that were running when the memory dump was collected.
+
+If you select the Complete memory dump option, you must have a paging file on the boot volume that is sufficient to hold all the physical RAM plus 1 megabyte (MB).
+
+If a second problem occurs and another complete memory dump (or kernel memory dump) file is created, the previous file is overwritten.
+
+Note The Complete memory dump option is not available on computers that are running a 32-bit operating system and that have 2 gigabytes (GB) or more of RAM. 
+
+
+Kernel memory dump
+
+A kernel memory dump records only the kernel memory. This speeds up the process of recording information in a log when your computer stops unexpectedly. Depending on the RAM in your computer, you must have between 150MB and up to 2GB of pagefile space available based on server load and the amount of physical RAM available for page file space on the boot volume.
+
+This dump file does not include unallocated memory or any memory that is allocated to User-mode programs. It includes only memory that is allocated to the kernel and hardware abstraction layer (HAL) in Windows 2000 and later, and memory allocated to Kernel-mode drivers and other Kernel-mode programs. For most purposes, this dump file is the most useful. It is significantly smaller than the complete memory dump file, but it omits only those parts of memory that are unlikely to have been involved in the problem.
+
+If a second problem occurs and another kernel memory dump file (or a complete memory dump file) is created, the previous file is overwritten. 
+
+
+A small memory dump records the smallest set of useful information that may help identify why your computer stopped unexpectedly. This option requires a paging file of at least 2 MB on the boot volume and specifies that Windows 2000 and later create a new file every time your computer stops unexpectedly. A history of these files is stored in a folder.
+
+This dump file type includes the following information:
+
+    * The Stop message and its parameters and other data
+    * A list of loaded drivers
+    * The processor context (PRCB) for the processor that stopped
+    * The process information and kernel context (EPROCESS) for the process that stopped
+    * The process information and kernel context (ETHREAD) for the thread that stopped
+    * The Kernel-mode call stack for the thread that stopped
+
+This kind of dump file can be useful when space is limited. However, because of the limited information included, errors that were not directly caused by the thread that was running at the time of the problem may not be discovered by an analysis of this file.
+
+If a second problem occurs and a second small memory dump file is created, the previous file is preserved. Each additional file is given a distinct name. The date is encoded in the file name. For example, Mini022900-01.dmp is the first memory dump generated on February 29, 2000. A list of all small memory dump files is kept in the %SystemRoot%\Minidump folder. 
+
+
+
+Link:
+http://support.microsoft.com/kb/254649
+
+

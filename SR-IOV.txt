@@ -1,0 +1,163 @@
+==================================SR-IOV==================================
+1.summary of the SR-IOV.
+------------------------
+Single Root I/O Virtualization (SR-IOV) is a PCI feature which allows virtual functions (VF) to be created that share the resources of a physical function (PF).
+SR-IOV is primarily useful in allowing a single PCI device to be shared amongst multiple virtual machines.
+SR-IOV allows a single PCI device to be shared amongst multiple virtual machines while retaining the performance benefit of assigning a PCI device to a virtual machine. A common example is where a single SR-IOV capable NIC - with perhaps only a single physical network port - might be shared with multiple virtual machines by assigning a virtual function to each VM.
+SR-IOV support is implemented in the kernel. The core implementation is contained in the PCI subsystem, but there must also be driver support for both the Physical Function (PF) and Virtual Function (VF)devices. With an SR-IOV capable device one can allocate VFs from a PF. The VFs surface as PCI devices which are backed on the physical PCI device by resources (queues, and register sets).
+
+2.how to test.
+--------------
+ 1)Ensure that you have a supported SR-IOV capable device (currently only test: intel dual-port 82576 / intel dual-port 82599 / emulex / broadcome bnx2x NIC)
+ 2)Ensure the PF driver allocates a number of VFs (e.g. modprobe igb max_vfs=7)
+ 3)Assign the VF to a guest (see Features/KVM PCI Device Assignment)
+ 4)Load the VF driver in the guest and ensure the device works as expected (igbvg is the VF driver for 82576/82599)
+
+3.user Experience.
+------------------
+As above, users should be able to allocate VFs and assign them to guest virtual machines, allowing the physical resources of the PF to be shared with multiple guests.
+
+4.prepare configure.
+--------------------
+ 1)BIOS: Enable VT-d in Intel host( AMD-Vi in AMD host).
+ 2)Host kernel line: add intel_iommu=on to the kernel line for intel host, AMD Host: add amd_iommu=on to the kernel CML.
+ 3)Ensure that you have a supported SR-IOV capable device(82576/82599) in host.
+ 4)Enable device assignment when interrupt remapping is not supported on the platform (Intel VT-d1) can use the "allow_unsafe_assigned_interrupts=1" module option.
+   # echo 1 > /sys/module/kvm/parameters/allow_unsafe_assigned_interrupts
+
+5.assign 1 PF + 1 VF to a guest.
+--------------------------------
+ Note: at least need two phsical ports, this PF to a guest where no VFs are in use.
+ 5.1.generate VFs.
+ # modprobe -r igb
+ # modprobe igb max_vfs=7
+ 5.2.unbind 1 PF and 1 VF from host kernel driver.
+ # lspci | grep 82576
+ 23:00.0 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+ 23:00.1 Ethernet controller: Intel Corporation 82576 Gigabit Network Connection (rev 01)
+ 23:10.0 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.1 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.2 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.3 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.4 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.5 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.6 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:10.7 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:11.0 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:11.1 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:11.2 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:11.3 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:11.4 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ 23:11.5 Ethernet controller: Intel Corporation 82576 Virtual Function (rev 01)
+ # lspci -n | grep 23:00.1
+ 23:00.1 0200: 8086:10c9 (rev 01)
+ # echo "8086 10c9" > /sys/bus/pci/drivers/pci-stub/new_id
+ # echo 0000:23:00.1 > /sys/bus/pci/devices/0000\:23\:00.1/driver/unbind
+ # echo 0000:23:00.1 > /sys/bus/pci/drivers/pci-stub/bind
+ # lspci -n | grep 23:10.0
+ 23:10.0 0200: 8086:10ca (rev 01)
+ # echo "8086 10ca" > /sys/bus/pci/drivers/pci-stub/new_id
+ # echo 0000:23:10.0 > /sys/bus/pci/devices/0000\:23\:10.0/driver/unbind
+ # echo 0000:23:10.0 > /sys/bus/pci/drivers/pci-stub/bind
+ 5.3.assign VF and PF to a guest.
+ CLI example:
+ # /usr/libexec/qemu-kvm ...-monitor stdio -device pci-assign,host=23:10.0,id=vfnet -device pci-assign,host=23:00.1,id=pfnet
+ 5.4.load the VF/PF driver in the guest.
+ for pf: # modprobe igb
+ for 82576 82576 vf: # modprobe igbvf
+
+6.assign multiple VFs to a guest successfully.
+----------------------------------------------
+...(the same steps)
+7.hot add/remove VF to a guest.
+---------------------------------
+CLI: #...-device pci-assign,host=23:10.0,id=vfnet1 -device pci-assign,host=23:10.2,id=vfnet2
+hot add VF:
+(qemu) device_add pci-assign,host=23:10.4,id=vfnet3
+{"execute":"device_add","arguments":{"driver":"pci-assign","host":"23:10.4","id":"vfnet3"}}
+hot remove VF:
+(qemu)device_del $id
+
+8.hot-unplug VF/PF with invalid addr value, shouldn't cause QEMU to quit or crash.
+----------------------------------------------------------------------------------
+(qemu) device_add pci-assign,host=23:10.0,addr=sluo,id=vfnet1
+Property 'pci-assign.addr' doesn't take value 'sluo'
+
+9.ability to create a Virtual Function (VF) from a Physical Function (PF). 
+--------------------------------------------------------------------------
+The PF is responsible for allocating its VFs. This is handled by the PF driver. Testing this ability requires reloading the relevant driver telling it how many VFs to allocate. The Intel 82576 driver is called igb. The Neterion X3100 driver is called vxge. Each of those drivers take module parameters which will tell the driver how many VFs to allocate when loaded. Such as: 
+* Neterion X3100 
+Choosing a value N for max_config_dev: N can be from 1 to 17, and this will create (N - 1) VFs, 1 is the PF.
+ # rmmod vxge / # modprobe -r vxge
+ # modprobe vxge max_config_dev=17
+* Intel 82576 
+ Choosing a value N for max_vfs: N can be from 0 to 7, and this will create N VFs per PF. Some cards may be multi-function, for example a dual port card will have 2 PFs, one for each port.
+ 1)remove the module to change the variable. 
+ # rmmod igb / # modprobe -r igb
+ 2)restart the module with the max_vfs set to 1 or any number of Virtual Functions up to the maximum should work by your device.
+ # modprobe igb max_vfs=7
+Once a VF has been successfully allocated, it can be treated much like a normal PCI device. Namely, it can be assigned to a guest.
+
+10.boot guest with sr-iov+macvtap+vhost(on/off).
+------------------------------------------------
+# ethtool -i p5p2
+driver: igb
+version: 3.2.10-k
+firmware-version: 1.5-1
+bus-info: 0000:23:00.1
+# ethtool p5p2
+Settings for p5p2:
+Supported ports: [ TP ]
+Supported link modes: 10baseT/Half 10baseT/Full
+100baseT/Half 100baseT/Full
+1000baseT/Full
+Supports auto-negotiation: Yes
+Advertised link modes: 10baseT/Half 10baseT/Full
+100baseT/Half 100baseT/Full
+1000baseT/Full
+Advertised pause frame use: Symmetric
+Advertised auto-negotiation: Yes
+Speed: 1000Mb/s
+Duplex: Full
+Port: Twisted Pair
+PHYAD: 1
+Transceiver: internal
+Auto-negotiation: on
+MDI-X: Unknown
+Supports Wake-on: d
+Wake-on: d
+Current message level: 0x00000003 (3)
+Link detected: yes
+generate VFs.
+#modprobe -r igb
+#modprobe igb max_vfs=7
+setup macvtap using vf interface.
+# ip link add link p5p2 dev macvtap1 type macvtap
+# ip link set macvtap1 address 22:11:22:45:66:90 up
+# ip link show macvtap1
+76: macvtap1@p5p2: mtu 1500 qdisc mq state UNKNOWN qlen 500
+link/ether 22:11:22:45:66:90 brd ff:ff:ff:ff:ff:ff
+get the fd of the macvtap.
+# ip link show | grep macvtap  (# killall dhclient  # dhclient p5p2 --> let VF(p5p2) get ip addresss.)
+# /usr/libexec/qemu-kvm ...-netdev tap,id=hostnet0,vhost=on/off,fd=76 76<>/dev/tap76 -device virtio-net-pci,netdev=hostnet0,id=virtio-net-pci0,mac=22:11:22:45:66:90...
+#### the number 76 from the "ip link show | grep macvtap"
+#### the mac addr of guest nic should exactly same as macvtap
+
+11.broadcom bnx2x nic.
+---------------------
+# lspci -vvv -s 04:00.1 | grep 'Kernel modules'
+    Kernel modules: bnx2x
+# ip link set p2p2 up
+# echo 4 > /sys/bus/pci/devices/0000\:04\:00.1/sriov_numvfs
+# lspci | grep -i BCM57810
+04:00.0 Ethernet controller: Broadcom Corporation NetXtreme II BCM57810 10 Gigabit Ethernet (rev 10)
+04:00.1 Ethernet controller: Broadcom Corporation NetXtreme II BCM57810 10 Gigabit Ethernet (rev 10)
+04:09.0 Ethernet controller: Broadcom Corporation NetXtreme II BCM57810 10 Gigabit Ethernet Virtual Function
+04:09.1 Ethernet controller: Broadcom Corporation NetXtreme II BCM57810 10 Gigabit Ethernet Virtual Function
+04:09.2 Ethernet controller: Broadcom Corporation NetXtreme II BCM57810 10 Gigabit Ethernet Virtual Function
+04:09.3 Ethernet controller: Broadcom Corporation NetXtreme II BCM57810 10 Gigabit Ethernet Virtual Function
+# lspci -n -s 0000:04:00.1 | awk '{ print $3 }'
+14e4:168e
+# lspci -n | grep 04:00.1
+04:00.1 0200: 14e4:168e (rev 10)
+

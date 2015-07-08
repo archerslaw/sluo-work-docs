@@ -1,0 +1,21 @@
+==================================cpu hotplug==================================
+1.cpu hotplug testing. In any case, here's how to verify it:
+<qemu-kvm-command-line>...-smp 2,sockets=2,cores=1,threads=1,maxcpus=X
+ * switch to the monitor.
+ * type 'cpu_set <n+1> online'.
+ * A new cpu should appear on /sys/devices/system/cpu.
+ * bring it online by writting 1 to the "online" file inside that directory on guest.
+ * Try adding as many cpus(X) as possible, and make sure we at least do not crash. 
+2.How do i logically offline a CPU?
+# echo 0 > /sys/devices/system/cpu/cpuX/online
+Once the logical offline is successful, check
+# cat /proc/interrupts
+You should now not see the CPU that you removed. Also online file will report the state as 0 when a cpu if offline and 1 when its online.
+To display the current cpu state.
+# cat /sys/devices/system/cpu/cpuX/online
+3.Q: Why can't i remove CPU0 on some systems?
+A: Some architectures may have some special dependency on a certain CPU. In current ACPI specifications, we didn't have a way to change the target CPU. Hence if the current ACPI version doesn't support such re-direction, we disable that CPU by making it not-removable. In such cases you will also notice that the online file is missing under cpu0.
+
+
+
+

@@ -1,0 +1,36 @@
+==================================acpi==================================
+1.suspend guest to disk.
+------------------------
+winux: # pm-hibernate / # echo disk >/sys/power/state
+windows: need enable S4 via "# powercfg -h on"
+winxp/2k3/win7: click "start" button and select "hibernate" in the menu.
+win2k8: control Panel -> power option -> "choose what the power button does" -> select "hibernate" ->  click "save changes" button.
+resume host via pressing power button.
+
+2.suspend guest to mem.
+-----------------------
+linux: # pm-suspend / # echo mem >/sys/power/state
+windows: click Star -> standby (or sleep/suspend).
+for windows 2k8 guest: please check the "suspend to disk" case to find how to do s3/s4 for 2k8 guest.
+resume host via pressing power button.
+
+3.resume VM from s3 as a response for monitor/keyboard/mouse action/RTC alarm.
+------------------------------------------------------------------------------
+(1)Press the keyboard.
+(2)Send "system_wakeup" qemu command.
+(3)Click the mouse in the guest. (Need to use the PS/2 mouse, USB mouse is not supported.)
+(4)RTC to wakeup guest:
+ take linux guest for example:  # rtcwake  -m mem -t 20s (Guest will wakeup automatically after 20s)
+ for windows guest: "start" -> "control-panel" -> "System and Security" -> "Administrative Tools"-> "Task Scheduler". Select "Create Task..." and create a task as following:
+ 1)in the "General" tab, fill in "Name" and "Description", check "Run with highest privileges".
+ 2)in the "Action" tab, new a action with "Display a message".
+ 3)in the "Conditions" tab check "Wake the computer to run this task".
+ 4)in the "Triggers" tab, new a trigger, set one time and select "enabled". 
+
+4.enable S3/S4 by adding the following commands:
+...-global PIIX4_PM.disable_s3=0 -global PIIX4_PM.disable_s4=0
+
+5.Repeat do S3 for 20 times.
+# for i in $( seq 1 20 ); do rtcwake -m mem -s 5; sleep 5; done
+suspend guest to memory inside guest and wakeup it after 5 minutes.
+# rtcwake -m mem -s 300
