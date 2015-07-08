@@ -1,2 +1,2 @@
 # sluo-work-docs
-working documents and scripts for sluo.
+It's my working documents and scripts for sluo.
