@@ -9,3 +9,6 @@ http://www.infoq.com/cn/articles/openstack-access-request-calling-process
 
 Nova创建虚拟机实例过程简述
 http://blog.csdn.net/crazystone86/article/details/14222779
+
+OpenStack启动虚拟机时Nova内部工作流程
+http://blog.csdn.net/julykobe/article/details/22945317
