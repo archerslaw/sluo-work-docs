@@ -1,0 +1,11 @@
+OpenStack Nova：虚拟机启动流程
+http://github.apporc.org/openstack/2015/03/19/nova-boot-instance.html
+
+openstack之虚拟机的创建流程，openstack虚拟机
+http://www.bkjia.com/yjs/855407.html
+
+一个OpenStack访问请求在各组件之间的调用过程
+http://www.infoq.com/cn/articles/openstack-access-request-calling-process
+
+Nova创建虚拟机实例过程简述
+http://blog.csdn.net/crazystone86/article/details/14222779
