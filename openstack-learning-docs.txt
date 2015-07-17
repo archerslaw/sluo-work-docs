@@ -21,3 +21,9 @@ http://my.oschina.net/crook/blog/224991
 
 openstack nova volume-attach 源码分析nova internal（二）
 http://my.oschina.net/crook/blog/226313
+
+Nova snapshot 流程分析
+http://blog.csdn.net/epugv/article/details/9832535
+
+Nova动态迁移流程分析
+http://blog.csdn.net/epugv/article/details/9706041
