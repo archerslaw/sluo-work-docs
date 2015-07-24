@@ -1,0 +1,8 @@
+红帽集群套件RHCS四部曲
+RHCS(概念篇) http://blog.chinaunix.net/uid-26931379-id-3558604.html
+RHCS(实战篇) http://blog.chinaunix.net/uid-26931379-id-3558613.html
+RHCS(测试篇) http://blog.chinaunix.net/uid-26931379-id-3558621.html
+RHCS(维护篇) http://blog.chinaunix.net/uid-26931379-id-3558624.html
+
+RHCS集群理论暨最佳实践 http://369369.blog.51cto.com/319630/836001/
+
