@@ -6,3 +6,6 @@ RHCS(维护篇) http://blog.chinaunix.net/uid-26931379-id-3558624.html
 
 RHCS集群理论暨最佳实践 http://369369.blog.51cto.com/319630/836001/
 
+CentOS6.5 heartbeat高可用集群的详解及工作流程 http://www.centoscn.com/CentosServer/cluster/2014/0424/2859.html
+
+高可用，多路冗余GFS2集群文件系统搭建详解 http://dreamfire.blog.51cto.com/418026/1219221/
