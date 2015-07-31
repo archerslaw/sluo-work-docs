@@ -4,6 +4,13 @@ RHCS(实战篇) http://blog.chinaunix.net/uid-26931379-id-3558613.html
 RHCS(测试篇) http://blog.chinaunix.net/uid-26931379-id-3558621.html
 RHCS(维护篇) http://blog.chinaunix.net/uid-26931379-id-3558624.html
 
+RHCS基于RHEL6.0 x86_64（详解）视频讲解
+http://v.youku.com/v_show/id_XNDg1ODgyMDYw.html
+http://v.youku.com/v_show/id_XNDg1ODg0MzE2.html
+http://v.youku.com/v_show/id_XNDg1ODg2NTQ4.html
+http://v.youku.com/v_show/id_XNDg1ODg4NzUy.html
+http://v.youku.com/v_show/id_XNDg1ODkwMjQ4.html
+
 RHCS集群理论暨最佳实践 http://369369.blog.51cto.com/319630/836001/
 
 CentOS6.5 heartbeat高可用集群的详解及工作流程 http://www.centoscn.com/CentosServer/cluster/2014/0424/2859.html
