@@ -1,0 +1,7 @@
+sudo apt-get update
+sudo apt-get upgrade
+apt-cache policy update-manager-core
+sudo apt-get install update-manager-core
+sudo do-release-upgrade
+lsb_release -a
+uname -ri
